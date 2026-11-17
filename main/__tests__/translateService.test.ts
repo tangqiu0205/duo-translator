@@ -56,6 +56,7 @@ import { TRANSLATE_SERVICE, AI_PREFIX, CONFIG_KEY, ACTION } from "@/main/constan
 import { isTraditionalChinese } from "@/utils/language";
 import { aiPageTranslate } from "@/main/aiService";
 import { handleAsync } from "@/main/messageBridge";
+import * as translationCache from "@/main/storage/translationCache";
 
 const mockFetch = vi.fn();
 const mockIsTraditional = isTraditionalChinese as unknown as Mock;
@@ -776,5 +777,60 @@ describe("translateTextsWithCache", () => {
         routeFetch(() => reply([["你好"], ["en"]]));
         const out = await translateTextsWithCache(TRANSLATE_SERVICE.GOOGLE, ["hello"], "zh-CN");
         expect(out?.[0].translatedMappedHtmlText).toBe("你好");
+    });
+
+    it("isolates explicit-source cache entries and forwards the source to Google", async () => {
+        routeFetch(() => reply([["bonjour"], ["en"]]));
+        await translateTextsWithCache(TRANSLATE_SERVICE.GOOGLE, ["hello"], "fr", undefined, "en");
+        expect(translationCache.getMany).toHaveBeenCalledWith("google:from:en", "fr", ["hello"]);
+        expect(translationCache.putMany).toHaveBeenCalledWith("google:from:en", "fr", expect.any(Array));
+        const call = fetchCalls("https://translate-pa.googleapis.com")[0];
+        expect(JSON.parse(call[1].body)[0]).toEqual([["hello"], "en", "fr"]);
+    });
+
+    it("keeps auto-source cache entries backward compatible", async () => {
+        routeFetch(() => reply([["你好"], ["en"]]));
+        await translateTextsWithCache(TRANSLATE_SERVICE.GOOGLE, ["hello"], "zh-CN");
+        expect(translationCache.getMany).toHaveBeenCalledWith("google", "zh-CN", ["hello"]);
+    });
+
+    it("forwards explicit sources even when caching is disabled", async () => {
+        mockConfigGet.mockImplementation(async (key?: string) => key === CONFIG_KEY.TRANSLATION_CACHE_SWITCH ? false : undefined);
+        routeFetch(() => reply([["bonjour"], ["en"]]));
+        await translateTextsWithCache(TRANSLATE_SERVICE.GOOGLE, ["hello"], "fr", undefined, "en");
+        expect(translationCache.getMany).not.toHaveBeenCalled();
+        expect(JSON.parse(fetchCalls("https://translate-pa.googleapis.com")[0][1].body)[0][1]).toBe("en");
+    });
+
+    it("supports an explicit Microsoft source when the response omits detection", async () => {
+        routeFetch(() => reply([{ translations: [{ text: "bonjour" }] }]));
+        const result = await microsoftTranslationService.translateText(["hello"], "fr", undefined, "en");
+        const call = fetchCalls(MS_TRANSLATE_HOST)[0];
+        expect(new URL(call[0]).searchParams.get("from")).toBe("en");
+        expect(result[0].sourceLang).toBe("en");
+    });
+
+    it("separates Bilibili model caches and resolves each model only once per batch", async () => {
+        const { BilibiliTranslator } = await import("@/main/bilibiliTranslator");
+        const translate = vi.spyOn(BilibiliTranslator.prototype, "translate")
+            .mockResolvedValue([{ text: "你好", sourceLang: "en" }]);
+        let model = "index-mt-9b";
+        mockConfigGet.mockImplementation(async (key?: string) => key === CONFIG_KEY.BILIBILI_TRANSLATE_MODEL ? model : undefined);
+        try {
+            await translateTextsWithCache(TRANSLATE_SERVICE.BILIBILI, ["hello"], "zh-CN");
+            model = "index-mt-2b";
+            await translateTextsWithCache(TRANSLATE_SERVICE.BILIBILI, ["hello"], "zh-CN");
+            expect(translationCache.getMany).toHaveBeenCalledWith("bilibili:index-mt-9b", "zh-CN", ["hello"]);
+            expect(translationCache.getMany).toHaveBeenCalledWith("bilibili:index-mt-2b", "zh-CN", ["hello"]);
+            expect(mockConfigGet.mock.calls.filter(([key]) => key === CONFIG_KEY.BILIBILI_TRANSLATE_MODEL)).toHaveLength(2);
+        } finally { translate.mockRestore(); }
+    });
+
+    it("normalizes Chinese source tags for DeepL", async () => {
+        mockConfigGet.mockImplementation(async (key?: string) => key === CONFIG_KEY.DEEPL_API_KEY ? "key" : undefined);
+        routeFetch(() => reply({ translations: [{ text: "hello", detected_source_language: "ZH" }] }));
+        await deeplTranslationService.translateText(["你好"], "en", undefined, "zh-CN");
+        const call = fetchCalls("https://api.deepl.com")[0];
+        expect(JSON.parse(call[1].body).source_lang).toBe("ZH");
     });
 });

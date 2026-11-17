@@ -5,6 +5,7 @@ import { ERROR_SCOPE, reportRequestError } from "@/main/errorReport";
 import { getConfig } from "@/utils/db";
 import { defineUnlistedScript } from "wxt/utils/define-unlisted-script";
 import { isTraditionalChinese } from "@/utils/language";
+import { isPublicTranslationService } from "@/main/publicTranslationConfig";
 import { contentInvisible, decodeHtmlText } from "@/utils/dom";
 import type { TranslationUnit, UnitContainer, UnitRange } from "@/main/dom/segments";
 import { unitRangeOf } from "@/main/dom/unitHit";
@@ -676,18 +677,18 @@ export async function restore(results: TranslateResult[]): Promise<void> {
 // or provider endpoint is reachable from a page context.
 // ---------------------------------------------------------------------------
 
-/** Escape plain input before handing it to Baidu's mapped-HTML adapter. */
+/** Escape plain input before handing it to a mapped-HTML adapter. */
 export function preparePlainTranslationTexts(service: string, texts: string[]): string[] {
-    if (service !== TRANSLATE_SERVICE.BAIDU) return texts;
+    if (service !== TRANSLATE_SERVICE.BAIDU && !isPublicTranslationService(service)) return texts;
     return texts.map((text) => text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;"));
 }
 
-/** Baidu returns HTML-safe output; input boxes and live captions need text. */
+/** Mapped-HTML services return escaped output; input boxes/captions need text. */
 export function readPlainTranslationText(service: string, text: string): string {
-    return service === TRANSLATE_SERVICE.BAIDU ? decodeHtmlText(text) : text;
+    return service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service) ? decodeHtmlText(text) : text;
 }
 
 /**
@@ -703,14 +704,16 @@ export async function translateTexts(
     texts: string[],
     targetLang: string,
     signal?: AbortSignal | null,
+    sourceLang?: string,
+    scene?: 'subtitle',
 ): Promise<TranslateResult[] | undefined> {
     if (texts.length === 0) return [];
     const raw = await abortableRequest<any[] | null>({
         action: ACTION.TRANSLATE_TEXTS,
         abortAction: ACTION.TRANSLATE_TEXTS_ABORT,
-        data: { service, texts, targetLang },
+        data: { service, texts, targetLang, ...(sourceLang ? { sourceLang } : {}), ...(scene ? { scene } : {}) },
         signal,
-        cancelOnTimeout: service === TRANSLATE_SERVICE.BAIDU,
+        cancelOnTimeout: service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service),
         // Anything that waits on a MODEL gets the long budget; plain machine
         // translators get the shorter one. Built-in AI counts even though it
         // issues no network request: running on-device makes it slower than a
@@ -719,7 +722,7 @@ export async function translateTexts(
         // inferences, and the first call for a language pair also has to load
         // the model into memory.
         // Baidu may queue behind other tabs to respect the configured QPS.
-        timeout: service.startsWith(AI_PREFIX) || service === TRANSLATE_SERVICE.BUILTIN || service === TRANSLATE_SERVICE.BAIDU
+        timeout: service.startsWith(AI_PREFIX) || service === TRANSLATE_SERVICE.BUILTIN || service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service)
             ? AI_REQUEST_TIMEOUT
             : API_REQUEST_TIMEOUT,
     });

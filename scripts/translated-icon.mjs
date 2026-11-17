@@ -1,9 +1,5 @@
-// Renders the "page is translated" toolbar icon: the stock logo, untouched in
-// size and position, with a green check badge over the bottom-right corner —
-// the same badge the float ball's docked switch shows (#23A455 disc, white
-// ring, white check). The badge is allowed to cover a sliver of the green
-// bubble; shrinking or shifting the logo to avoid that was tried and rejected,
-// the icon has to stay recognisably the same icon.
+// Renders the translated toolbar state from the shared logo, without moving
+// or resizing it. A green check badge matches the float ball's docked switch.
 //
 //   pnpm icon:translated          → public/icon/translated/{16,32,48,128}.png
 //   pnpm icon:translated --check  → also reports how much of the logo the badge covers
@@ -21,13 +17,11 @@ const outDir = resolve(root, 'public/icon/translated');
 const SIZES = [16, 32, 48, 128];
 
 // Everything in the logo's 1024-unit viewBox.
-const LOGO_SCALE = 1;   
-const LOGO_Y = 0;             // translate before scaling; artwork spans y≈112..904
-const BADGE_R = 184;          // green disc radius
-const BADGE_RING = 50;        // white ring width
-const BADGE_CX = 1024 - BADGE_R - BADGE_RING;
-const BADGE_CY = BADGE_CX;
-const CHECK_SCALE = 12;       // lucide 24-unit grid → viewBox units
+const BADGE_R = 128;          // leave the bilingual glyphs readable
+const BADGE_RING = 32;
+const BADGE_CX = 864;
+const BADGE_CY = 864;
+const CHECK_SCALE = 8;       // lucide 24-unit grid → viewBox units
 const CHECK_STROKE = 6.2;     // in lucide units (float ball uses 3 at 14px; thicker here for 16px)
 
 const logo = readFileSync(resolve(root, 'public/DuoTranslator.svg'), 'utf8')
@@ -38,7 +32,7 @@ const check = `<path transform="translate(${BADGE_CX - 12 * CHECK_SCALE} ${BADGE
 
 function svg({ logoLayer = true, badgeLayer = true } = {}) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="100%" height="100%" fill="none">
-  ${logoLayer ? `<g transform="scale(${LOGO_SCALE}) translate(0 ${LOGO_Y})">${logo}</g>` : ''}
+  ${logoLayer ? `<svg width="1024" height="1024" viewBox="48 64 928 928">${logo}</svg>` : ''}
   ${badgeLayer ? `<circle cx="${BADGE_CX}" cy="${BADGE_CY}" r="${BADGE_R + BADGE_RING}" fill="#fff"/>
   <circle cx="${BADGE_CX}" cy="${BADGE_CY}" r="${BADGE_R}" fill="#23A455"/>
   ${check}` : ''}
@@ -103,5 +97,7 @@ if (process.argv.includes('--check')) {
 const tiles = SIZES.map((s) => `<img src="data:image/png;base64,${readFileSync(resolve(outDir, `${s}.png`)).toString('base64')}" style="width:128px;height:128px;image-rendering:pixelated;margin:8px;background:#fff">`).join('');
 await page.setViewportSize({ width: 600, height: 300 });
 await page.setContent(`<body style="margin:0;background:#2b2b2b;display:flex;align-items:center;flex-wrap:wrap">${tiles}${tiles.replace(/background:#fff/g, 'background:#1f1f1f')}</body>`);
-writeFileSync(resolve(root, process.env.PREVIEW_OUT ?? '/dev/null'), await page.screenshot());
+if (process.env.PREVIEW_OUT) {
+  writeFileSync(resolve(root, process.env.PREVIEW_OUT), await page.screenshot());
+}
 await browser.close();

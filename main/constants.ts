@@ -196,6 +196,10 @@ export enum TRANSLATE_SERVICE {
     // it preserves the same `<bN>` inline placeholders Microsoft does, so it
     // needs no special handling in the DOM orchestration.
     YANDEX = 'yandex',
+    BILIBILI = 'bilibili',
+    DOUBAO = 'doubao',
+    DOUBAO_VOLC = 'doubaoVolc',
+    DOUBAO_MICROSOFT = 'doubaoMicrosoft',
     // Browser built-in, on-device translation model (Chrome 138+ / Edge 148+)
     // reached through the `Translator` / `LanguageDetector` globals. Unlike
     // every other provider it issues no network request at all — see
@@ -219,6 +223,10 @@ export const TRANSLATE_SERVICES: Map<string, TranslateServiceMeta> = new Map([
     ["microsoft", new TranslateServiceMeta("Microsoft", "microsoft", "microsoftTranslator", "MicrosoftTranslateDescription", false)],
     ["google", new TranslateServiceMeta("Google", "google", "googleTranslate", "GoogleTranslateDescription", false)],
     ["yandex", new TranslateServiceMeta("Yandex", "yandex", "yandexTranslate", "YandexTranslateDescription", false)],
+    ["bilibili", new TranslateServiceMeta("bilibiliTranslate", "bilibili", "bilibiliTranslate", "BilibiliTranslateDescription", true)],
+    ["doubao", new TranslateServiceMeta("doubaoTranslate", "doubao", "doubaoTranslate", "DoubaoTranslateDescription", false, undefined, undefined, "doubao")],
+    ["doubaoVolc", new TranslateServiceMeta("doubaoVolcTranslate", "doubaoVolc", "doubaoVolcTranslate", "DoubaoTranslateDescription", false, undefined, undefined, "volc")],
+    ["doubaoMicrosoft", new TranslateServiceMeta("doubaoMicrosoftTranslate", "doubaoMicrosoft", "doubaoMicrosoftTranslate", "DoubaoTranslateDescription", false, undefined, undefined, "microsoft")],
     // Insertion order IS the display order of every service picker and of the
     // Options service table — there is no sort key anywhere. Built-in AI sits
     // above DeepL, followed by Azure and Google Cloud. `editable: true` makes
@@ -280,6 +288,7 @@ export enum ACTION {
     LEAVE_SELECTION_MODE = 'leaveSelectionMode',
     AI_OPEN_WORKBENCH = 'aiOpenWorkbench',
     AI_PROVIDER_TEST = 'aiProviderTest',
+    AI_PROVIDER_MODELS = 'aiProviderModels',
     // Test a built-in translation service (google/microsoft/deepl) from Options.
     TRANSLATE_SERVICE_TEST = 'translateServiceTest',
     // Generic one-shot (non-streaming) AI completion: content sends a task +
@@ -507,6 +516,7 @@ export enum CONFIG_KEY {
     BAIDU_APP_ID = 'baiduAppId',
     BAIDU_SECRET_KEY = 'baiduSecretKey',
     BAIDU_QPS = 'baiduQps',
+    BILIBILI_TRANSLATE_MODEL = 'bilibiliTranslateModel',
     // When true, cloud sync includes API keys (AI providers + translation
     // APIs) in the synced snapshot. Off by default so secrets stay on-device
     // unless the user opts in. Separate from the per-export "include keys"
@@ -763,6 +773,7 @@ export const DEFAULT_VALUE = {
     BAIDU_APP_ID: '',
     BAIDU_SECRET_KEY: '',
     BAIDU_QPS: 1,
+    BILIBILI_TRANSLATE_MODEL: 'Index-Translate-35B-A3B',
     // Module-level constant on purpose: `useConfig` resolves its default
     // through here, and a fresh [] every render would loop useSyncExternalStore.
     NO_TRANSLATE_LANGUAGES: [] as string[],

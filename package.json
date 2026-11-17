@@ -23,6 +23,7 @@
     "submit": "wxt submit",
     "compile": "tsc --noEmit",
     "i18n:check": "node scripts/checkI18n.mjs",
+    "icons": "node scripts/icons.mjs && node scripts/translated-icon.mjs --check",
     "icon:translated": "node scripts/translated-icon.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest",

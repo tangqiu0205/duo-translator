@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { browser } from 'wxt/browser';
 import { ACTION, STATUS_SUCCESS } from '@/main/constants';
@@ -55,6 +55,19 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
     const [testing, setTesting] = useState(false);
     const [testReply, setTestReply] = useState<{ ok: boolean; text: string } | null>(null);
     const [saving, setSaving] = useState(false);
+    const [fetchingModels, setFetchingModels] = useState(false);
+    const [fetchedModels, setFetchedModels] = useState<string[] | null>(null);
+    const [modelsError, setModelsError] = useState<string | null>(null);
+    const modelsRequest = useRef(0);
+
+    // Invalidate results when credentials change or the dialog closes/reopens.
+    useEffect(() => {
+        modelsRequest.current++;
+        setFetchedModels(null);
+        setModelsError(null);
+        setFetchingModels(false);
+        return () => { modelsRequest.current++; };
+    }, [open, initial, type, url, apiKey]);
 
     // Reset form whenever the dialog opens (initial may differ across opens).
     useEffect(() => {
@@ -78,6 +91,10 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
 
     const entry = useMemo(() => getCatalogEntry(type), [type]);
 
+    const modelOptions = fetchedModels ?? entry.models;
+    const selectableModels = model.trim() && !modelOptions.includes(model.trim())
+        ? [model.trim(), ...modelOptions] : modelOptions;
+
     const onTypeChange = (next: string) => {
         const t1 = next as AiProviderType;
         setType(t1);
@@ -100,7 +117,7 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
      */
     const onCustomModelChange = (next: boolean) => {
         setCustomModel(next);
-        if (!next && !entry.models.includes(model.trim())) setModel(entry.models[0] ?? '');
+        if (!next && !modelOptions.includes(model.trim())) setModel(modelOptions[0] ?? '');
         else if (!next) setModel(model.trim());
     };
 
@@ -127,6 +144,35 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
         trimmedModel,
         initial?.enabled ?? true,
     );
+
+    const fetchModels = async () => {
+        if (!trimmedUrl || apiKeyMissing || fetchingModels) return;
+        const request = ++modelsRequest.current;
+        setFetchingModels(true);
+        setModelsError(null);
+        try {
+            const resp: any = await browser.runtime.sendMessage({
+                action: ACTION.AI_PROVIDER_MODELS,
+                data: buildProvider(),
+            });
+            if (request !== modelsRequest.current) return;
+            if (resp?.status !== STATUS_SUCCESS) throw new Error(resp?.data?.message || 'Failed');
+            const models: unknown = resp.data?.models;
+            if (!Array.isArray(models) || !models.length || !models.every((m) => typeof m === 'string' && m.trim())) {
+                throw new Error(t('aiModelsEmpty', 'No models returned. You can enter a model name manually.'));
+            }
+            setFetchedModels([...new Set(models)]);
+            setCustomModel(false);
+            // Keep the current selection, even when a gateway omits it from its list.
+            setModel((current) => current.trim() || models[0]);
+        } catch (e: any) {
+            if (request === modelsRequest.current) {
+                setModelsError(`${t('aiFetchModelsFailed', 'Could not fetch models')}: ${e?.message || String(e)}`);
+            }
+        } finally {
+            if (request === modelsRequest.current) setFetchingModels(false);
+        }
+    };
 
     const runTest = async () => {
         if (!valid) return;
@@ -165,6 +211,7 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
             open={open}
             onClose={onClose}
             widthClass="w-[520px]"
+            error={modelsError}
             title={isEdit ? t('aiEditProvider', 'Edit AI provider') : t('aiAddProvider', 'Add provider')}
             footer={
                 <>
@@ -268,27 +315,48 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
                 </Field>
 
                 <Field label={t('aiProviderModel', 'Model')} required>
-                    {customModel || entry.models.length === 0 ? (
-                        <Input
-                            value={model}
-                            onChange={(e) => setModel(e.target.value)}
-                            placeholder={getDefaultModel(type) || 'model-name'}
-                        />
-                    ) : (
-                        <Select value={model} onValueChange={setModel}>
-                            <SelectTrigger>
-                                <SelectValue placeholder={getDefaultModel(type)} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {entry.models.map((m) => (
-                                    <SelectItem key={m} value={m}>
-                                        {m}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                    <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                            {customModel || modelOptions.length === 0 ? (
+                                <Input
+                                    value={model}
+                                    onChange={(e) => setModel(e.target.value)}
+                                    placeholder={getDefaultModel(type) || 'model-name'}
+                                />
+                            ) : (
+                                <Select value={model} onValueChange={setModel}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={getDefaultModel(type)} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {selectableModels.map((m) => (
+                                            <SelectItem key={m} value={m}>
+                                                {m}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
+                        {type !== 'opencode' && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0"
+                                onClick={() => void fetchModels()}
+                                disabled={!trimmedUrl || apiKeyMissing || fetchingModels}
+                            >
+                                {fetchingModels ? t('aiFetchingModels', 'Fetching...') : t('aiFetchModels', 'Fetch models')}
+                            </Button>
+                        )}
+                    </div>
+                    {fetchedModels && !fetchingModels && !modelsError && (
+                        <p role="status" className="text-[11px] text-emerald-600">
+                            {t('aiFetchModelsSuccess', 'Fetched {{count}} models', { count: fetchedModels.length })}
+                        </p>
                     )}
-                    {entry.models.length > 0 && (
+                    {modelOptions.length > 0 && (
                         <label className="flex w-fit cursor-pointer items-center gap-1.5 text-[11px] text-ink-mute">
                             <Checkbox
                                 checked={customModel}

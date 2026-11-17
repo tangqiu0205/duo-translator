@@ -31,6 +31,15 @@ beforeEach(() => {
     vi.clearAllMocks();
 });
 
+it("forwards an explicit source language to background", async () => {
+    mockSend.mockResolvedValue([{ translatedMappedHtmlText: "bonjour", sourceLang: "en", score: 1 }]);
+    await translateTexts("google", ["hello"], "fr", undefined, "en");
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        action: ACTION.TRANSLATE_TEXTS,
+        data: expect.objectContaining({ sourceLang: "en" }),
+    }), expect.any(Number));
+});
+
 // ---------------------------------------------------------------------------
 // Data classes
 // ---------------------------------------------------------------------------

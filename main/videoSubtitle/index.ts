@@ -872,7 +872,7 @@ export function initVideoSubtitle(): VideoSubtitleController {
         // Captured in the same synchronous stretch as `pendingIdx`, so the two
         // cannot disagree.
         const gen = s.cuesGen;
-        void translateTexts(service, preparePlainTranslationTexts(service, texts), lang, s.abort.signal)
+        void translateTexts(service, preparePlainTranslationTexts(service, texts), lang, s.abort.signal, undefined, 'subtitle')
             .then((results) => {
                 if (session !== s || s.abort.signal.aborted) return;
                 if (!results || results.length !== texts.length) return;
@@ -988,6 +988,8 @@ export function initVideoSubtitle(): VideoSubtitleController {
                         preparePlainTranslationTexts(service, batch.map((c) => c.text)),
                         lang,
                         job.abort.signal,
+                        undefined,
+                        'subtitle',
                     );
                     if (job.abort.signal.aborted) return;
                     if (results && results.length === batch.length) {

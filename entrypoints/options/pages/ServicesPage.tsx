@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { browser } from 'wxt/browser';
 import { ACTION, CONFIG_KEY, STATUS_SUCCESS, TRANSLATE_SERVICE } from '@/main/constants';
 import { getConfig, setConfig, setConfigOrThrow } from '@/utils/db';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BILIBILI_MODELS, DEFAULT_BILIBILI_MODEL } from '@/main/publicTranslationConfig';
 import { BuiltinAiModelDialog } from '@/components/options/BuiltinAiModelDialog';
 import { builtinAiApiAvailable } from '@/main/builtinAi/capability';
 import {
@@ -88,11 +90,16 @@ export function ServicesPage() {
     // Built-in AI model dialog (status + download).
     const [builtinDialogOpen, setBuiltinDialogOpen] = useState(false);
     const [targetLang, setTargetLang] = useState('en');
+    const [bilibiliModel, setBilibiliModel] = useState<string>(DEFAULT_BILIBILI_MODEL);
+    const [bilibiliDraft, setBilibiliDraft] = useState<string>(DEFAULT_BILIBILI_MODEL);
+    const [bilibiliOpen, setBilibiliOpen] = useState(false);
+    const [bilibiliSaving, setBilibiliSaving] = useState(false);
+    const [bilibiliError, setBilibiliError] = useState('');
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            const [ds, deeplKey, azureKey, azureRegion, googleCloudKey, tl, baiduAppId, baiduSecretKey, baiduQps] = await Promise.all([
+            const [ds, deeplKey, azureKey, azureRegion, googleCloudKey, tl, baiduAppId, baiduSecretKey, baiduQps, savedBilibiliModel] = await Promise.all([
                 getConfig(CONFIG_KEY.DISABLED_TRANSLATE_SERVICES),
                 getConfig(CONFIG_KEY.DEEPL_API_KEY),
                 getConfig(CONFIG_KEY.AZURE_API_KEY),
@@ -102,6 +109,7 @@ export function ServicesPage() {
                 getConfig(CONFIG_KEY.BAIDU_APP_ID),
                 getConfig(CONFIG_KEY.BAIDU_SECRET_KEY),
                 getConfig(CONFIG_KEY.BAIDU_QPS),
+                getConfig(CONFIG_KEY.BILIBILI_TRANSLATE_MODEL),
             ]);
             if (cancelled) return;
             const set = new Set(Array.isArray(ds) ? ds : []);
@@ -130,6 +138,7 @@ export function ServicesPage() {
                 },
             });
             if (typeof tl === 'string' && tl) setTargetLang(tl);
+            if (typeof savedBilibiliModel === 'string' && savedBilibiliModel) setBilibiliModel(savedBilibiliModel);
             setRows(
                 // listTranslateServices() rather than TRANSLATE_SERVICES directly:
                 // Built-in AI must not appear on Firefox, and this is the shared
@@ -323,6 +332,12 @@ export function ServicesPage() {
 
     // Each editable service owns its own dialog — dispatch, don't early-return.
     const openEdit = (value: string) => {
+        if (value === TRANSLATE_SERVICE.BILIBILI) {
+            setBilibiliDraft(bilibiliModel);
+            setBilibiliError('');
+            setBilibiliOpen(true);
+            return;
+        }
         if (isCredentialService(value)) {
             setCredentialDraft(credentials[value]);
             editedCredentialFields.current.clear();
@@ -591,6 +606,38 @@ export function ServicesPage() {
             </div>
 
             <AiProvidersCard />
+
+            <Dialog
+                open={bilibiliOpen}
+                onClose={() => { if (!bilibiliSaving) setBilibiliOpen(false); }}
+                title={t('bilibiliModelTitle', 'Bilibili translation model')}
+                widthClass="w-[440px]"
+                error={bilibiliError}
+                footer={
+                    <Button disabled={bilibiliSaving || !(BILIBILI_MODELS as readonly string[]).includes(bilibiliDraft)} onClick={async () => {
+                        setBilibiliSaving(true);
+                        setBilibiliError('');
+                        try {
+                            await setConfigOrThrow(CONFIG_KEY.BILIBILI_TRANSLATE_MODEL, bilibiliDraft);
+                            setBilibiliModel(bilibiliDraft);
+                            setTestStates((current) => ({ ...current, [TRANSLATE_SERVICE.BILIBILI]: { kind: 'idle' } }));
+                            setBilibiliOpen(false);
+                        } catch (error) {
+                            setBilibiliError(error instanceof Error ? error.message : String(error));
+                        } finally {
+                            setBilibiliSaving(false);
+                        }
+                    }}>{t('aiSave', 'Save')}</Button>
+                }
+            >
+                <div className="flex flex-col gap-3">
+                    <Select value={bilibiliDraft} onValueChange={setBilibiliDraft}>
+                        <SelectTrigger aria-label={t('aiProviderModel', 'Model')}><SelectValue /></SelectTrigger>
+                        <SelectContent>{BILIBILI_MODELS.map((model) => <SelectItem key={model} value={model}>{model}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <p className="text-[12px] leading-5 text-ink-soft">{t('bilibiliPrivacyHint', 'Source text is sent to Bilibili. This public API uses no account cookies and may be rate limited or changed.')}</p>
+                </div>
+            </Dialog>
 
             <Dialog
                 open={credentialDialogService !== null}

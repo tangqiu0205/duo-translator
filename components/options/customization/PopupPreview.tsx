@@ -7,7 +7,7 @@ import { bindThemeToElement, useResolvedTheme } from '@/utils/theme';
 import { usePopupPrefs } from '@/utils/popupPrefs';
 
 /** Width the popup is fixed at (`#root` / `html, body` in popup.css). */
-const POPUP_WIDTH = 380;
+const POPUP_WIDTH = 400;
 
 /**
  * The popup's stylesheet, retargeted for a Shadow DOM.

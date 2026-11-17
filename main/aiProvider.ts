@@ -249,6 +249,8 @@ export interface ChatMessage {
 }
 
 export interface ChatOptions {
+    /** Public, keyless endpoints must explicitly omit account cookies. */
+    credentials?: 'omit';
     task?: AI_TASK;
     targetLang?: string;
     params?: any;

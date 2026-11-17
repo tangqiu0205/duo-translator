@@ -44,6 +44,9 @@ import { isTraditionalChinese, toSimplified, toTraditional } from "@/utils/langu
 import { utf8Length } from "@/utils/text";
 import { ABORT_SCOPE, handleAbort, handleAbortable, handleAsync } from "@/main/messageBridge";
 import { BaiduTranslator, type BaiduCredentials } from "@/main/baiduTranslator";
+import { BilibiliTranslator, getBilibiliModel } from "@/main/bilibiliTranslator";
+import { DoubaoTranslator } from "@/main/doubaoTranslator";
+import { isDoubaoService } from "@/main/publicTranslationConfig";
 
 // ---------------------------------------------------------------------------
 // Provider HTTP
@@ -205,6 +208,7 @@ export function getMicrosoftToken(force = false): Promise<Token> {
 
 export interface TranslateRequestOptions {
     retryCount?: number;
+    scene?: 'subtitle';
 }
 
 // A NOTE ON FAILURE, since this reverses an earlier design:
@@ -339,7 +343,7 @@ export class GoogleTranslateService extends TranslateService {
                 "Content-Type": "application/json+protobuf",
                 "x-goog-api-key": this.apiKey,
             },
-            body: JSON.stringify([[texts, "auto", targetLang], "te_lib"]),
+            body: JSON.stringify([[texts, _sourceLang || "auto", targetLang], "te_lib"]),
         }, signal);
 
         if (response.status !== 200) {
@@ -407,7 +411,7 @@ export class AzureTranslateService extends TranslateService {
 
         const chunks = splitTextBatch(texts, AZURE_BATCH_ITEM_LIMIT, AZURE_BATCH_CHAR_LIMIT);
         const translatedChunks = await Promise.all(
-            chunks.map((chunk) => this.translateOnce(chunk, targetLang, apiKey, region, signal)),
+            chunks.map((chunk) => this.translateOnce(chunk, targetLang, apiKey, region, signal, _sourceLang)),
         );
         return translatedChunks.flat();
     }
@@ -418,8 +422,10 @@ export class AzureTranslateService extends TranslateService {
         apiKey: string,
         region?: string,
         signal?: AbortSignal | null,
+        sourceLang?: string,
     ): Promise<TranslateResult[]> {
-        const url = `${AZURE_TRANSLATE_URL}&to=${encodeURIComponent(azureTargetLanguage(targetLang))}&textType=html`;
+        const url = `${AZURE_TRANSLATE_URL}&to=${encodeURIComponent(azureTargetLanguage(targetLang))}&textType=html`
+            + (sourceLang ? `&from=${encodeURIComponent(azureTargetLanguage(sourceLang))}` : "");
         const headers: Record<string, string> = {
             "Content-Type": "application/json; charset=UTF-8",
             "Ocp-Apim-Subscription-Key": apiKey,
@@ -429,8 +435,7 @@ export class AzureTranslateService extends TranslateService {
         const response = await providerFetch(url, {
             method: "POST",
             headers,
-            // Deliberately omit `from`: Azure then detects each source language
-            // and includes it in the corresponding response item.
+            // Without an explicit source, Azure detects each item independently.
             body: JSON.stringify(texts.map((text) => ({ Text: text }))),
         }, signal);
         if (response.status !== 200) throw providerHttpError("Azure Translator", url, response);
@@ -449,7 +454,7 @@ export class AzureTranslateService extends TranslateService {
             }
             return new TranslateResult(
                 translated,
-                transferLanguageCode(item.detectedLanguage?.language || ""),
+                transferLanguageCode(sourceLang || item.detectedLanguage?.language || ""),
                 item.detectedLanguage?.score ?? 0,
             );
         });
@@ -496,7 +501,7 @@ export class GoogleCloudTranslateService extends TranslateService {
             GOOGLE_CLOUD_BATCH_CHAR_LIMIT,
         );
         const translatedChunks = await Promise.all(
-            chunks.map((chunk) => this.translateOnce(chunk, targetLang, key, signal)),
+            chunks.map((chunk) => this.translateOnce(chunk, targetLang, key, signal, _sourceLang)),
         );
         return translatedChunks.flat();
     }
@@ -506,14 +511,14 @@ export class GoogleCloudTranslateService extends TranslateService {
         targetLang: string,
         apiKey: string,
         signal?: AbortSignal | null,
+        sourceLang?: string,
     ): Promise<TranslateResult[]> {
         const url = `${GOOGLE_CLOUD_TRANSLATE_URL}?key=${encodeURIComponent(apiKey)}`;
         const response = await providerFetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json; charset=UTF-8" },
-            // Deliberately omit `source`; the API auto-detects it. `html` is
-            // required because the translation pipeline carries inline tags.
-            body: JSON.stringify({ q: texts, target: targetLang, format: "html" }),
+            // Page translation carries inline tags; plain callers escape them.
+            body: JSON.stringify({ q: texts, target: targetLang, format: "html", ...(sourceLang ? { source: sourceLang } : {}) }),
         }, signal);
         if (response.status !== 200) throw providerHttpError("Google Cloud Translation", url, response);
 
@@ -530,7 +535,7 @@ export class GoogleCloudTranslateService extends TranslateService {
             }
             return new TranslateResult(
                 item.translatedText,
-                transferLanguageCode(item.detectedSourceLanguage || ""),
+                transferLanguageCode(sourceLang || item.detectedSourceLanguage || ""),
                 1,
             );
         });
@@ -653,9 +658,10 @@ export class MicrosoftTranslateService extends TranslateService {
         texts: string[],
         targetLang: string,
         signal?: AbortSignal | null,
-        _sourceLang?: string,
+        sourceLang?: string,
     ): Promise<TranslateResult[]> {
-        const url = MS_TRANSLATE_URL + "to=" + targetLang;
+        const url = MS_TRANSLATE_URL + "to=" + encodeURIComponent(targetLang)
+            + (sourceLang ? "&from=" + encodeURIComponent(sourceLang) : "");
         const response = await providerFetch(url, {
             method: "POST",
             headers: {
@@ -677,8 +683,8 @@ export class MicrosoftTranslateService extends TranslateService {
             (d) =>
                 new TranslateResult(
                     d.translations[0].text,
-                    transferLanguageCode(d.detectedLanguage.language),
-                    d.detectedLanguage.score,
+                    transferLanguageCode(sourceLang || d.detectedLanguage?.language || ""),
+                    d.detectedLanguage?.score ?? 1,
                 ),
         );
     }
@@ -936,10 +942,9 @@ export class YandexTranslateService extends TranslateService {
      * converts the whole batch on the way out.
      *
      * Applied **unconditionally** for a Chinese target, with no attempt to ask
-     * whether the source was Chinese, because the provider cannot know: the
-     * `sourceLang` parameter on `translateText` is never filled by any caller
-     * (`getTranslateResult` → `translateTexts` sends only `{service, texts,
-     * targetLang}`). Unconditional is safe precisely because each direction is
+     * whether the source was Chinese: page-translation callers omit
+     * `sourceLang`, unlike the popup's explicit-language text translation.
+     * Unconditional is safe precisely because each direction is
      * a no-op on text that is already in the target variant — Simplified is a
      * fixed point of t→cn — so this costs a trie walk (~1 ms per 9000 chars)
      * and changes nothing when there was nothing to change.
@@ -1137,7 +1142,7 @@ export class DeepLTranslateService extends TranslateService {
         const payload = await this.request({
             text: texts,
             target_lang: this.targetLangConverter(targetLang),
-            ...(sourceLang ? { source_lang: sourceLang.toUpperCase() } : {}),
+            ...(sourceLang ? { source_lang: sourceLang.split("-")[0].toUpperCase() } : {}),
         }, signal);
         if (!payload) throw new Error("DeepL returned an empty response");
         return this.toResults(payload);
@@ -1249,6 +1254,25 @@ export class AiTranslateService extends TranslateService {
 // Service registry
 // ---------------------------------------------------------------------------
 
+export class BilibiliTranslateService extends TranslateService {
+    readonly name = TRANSLATE_SERVICE.BILIBILI;
+    constructor(private readonly model?: string) { super(); }
+    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string): Promise<TranslateResult[]> {
+        const results = await new BilibiliTranslator(this.model).translate(texts, target, signal, source);
+        return results.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
+    }
+}
+
+export class DoubaoTranslateService extends TranslateService {
+    private readonly translator: DoubaoTranslator;
+    constructor(readonly name: string) { super(); this.translator = new DoubaoTranslator(name); }
+    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string, options?: TranslateRequestOptions): Promise<TranslateResult[]> {
+        const results = await this.translator.translate(texts, target, signal, source, options?.scene);
+        return results.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
+    }
+}
+
+
 export const googleTranslationService: TranslateService = new GoogleTranslateService();
 export const azureTranslationService: TranslateService = new AzureTranslateService();
 export const googleCloudTranslationService: TranslateService = new GoogleCloudTranslateService();
@@ -1268,6 +1292,10 @@ export const translationServices = new Map<string, TranslateService>([
     [azureTranslationService.name, azureTranslationService],
     [googleCloudTranslationService.name, googleCloudTranslationService],
     [baiduTranslationService.name, baiduTranslationService],
+    [TRANSLATE_SERVICE.BILIBILI, new BilibiliTranslateService()],
+    [TRANSLATE_SERVICE.DOUBAO, new DoubaoTranslateService(TRANSLATE_SERVICE.DOUBAO)],
+    [TRANSLATE_SERVICE.DOUBAO_VOLC, new DoubaoTranslateService(TRANSLATE_SERVICE.DOUBAO_VOLC)],
+    [TRANSLATE_SERVICE.DOUBAO_MICROSOFT, new DoubaoTranslateService(TRANSLATE_SERVICE.DOUBAO_MICROSOFT)],
     [microsoftTranslationService.name, microsoftTranslationService],
     [yandexTranslationService.name, yandexTranslationService],
     [builtinAiTranslationService.name, builtinAiTranslationService],
@@ -1367,14 +1395,27 @@ export async function translateTextsWithCache(
     texts: string[],
     targetLang: string,
     signal?: AbortSignal,
+    sourceLang?: string,
+    scene?: 'subtitle',
 ): Promise<TranslateResult[] | undefined> {
     if (texts.length === 0) return [];
-
+    let provider = resolveTranslateService(service);
+    if (!provider) return undefined;
+    let namespace = service;
+    if (service === TRANSLATE_SERVICE.BILIBILI) {
+        // Resolve once so a concurrent model edit cannot mix cache namespaces.
+        const model = await getBilibiliModel();
+        provider = new BilibiliTranslateService(model);
+        namespace += ':' + model;
+    }
+    if (isDoubaoService(service) && scene === 'subtitle') namespace += ':subtitle';
+    const options: TranslateRequestOptions | undefined = scene ? { scene } : undefined;
     if (!(await isTranslationCacheEnabled())) {
-        return resolveTranslateService(service)?.translateText(texts, targetLang, signal);
+        return provider.translateText(texts, targetLang, signal, sourceLang, options);
     }
 
-    const cached = await cacheGetMany(service, targetLang, texts);
+    const cacheService = sourceLang ? `${namespace}:from:${sourceLang}` : namespace;
+    const cached = await cacheGetMany(cacheService, targetLang, texts);
     const missIndices: number[] = [];
     const missTexts: string[] = [];
     for (let i = 0; i < texts.length; i++) {
@@ -1386,13 +1427,13 @@ export async function translateTextsWithCache(
 
     let fetched: TranslateResult[] = [];
     if (missTexts.length > 0) {
-        const r = await resolveTranslateService(service)?.translateText(missTexts, targetLang, signal);
+        const r = await provider.translateText(missTexts, targetLang, signal, sourceLang, options);
         if (!r) return undefined; // unknown service → bail like before
         // Provider must answer 1:1 with the inputs. If it doesn't, the
         // positional remap below would misalign — fall back to a full
         // (uncached) translation rather than return a corrupt array.
         if (r.length !== missTexts.length) {
-            return resolveTranslateService(service)?.translateText(texts, targetLang, signal);
+            return provider.translateText(texts, targetLang, signal, sourceLang, options);
         }
         fetched = r;
     }
@@ -1413,7 +1454,7 @@ export async function translateTextsWithCache(
         });
     }
 
-    cachePutMany(service, targetLang, toCache);
+    cachePutMany(cacheService, targetLang, toCache);
     return results;
 }
 //#endregion
@@ -1462,10 +1503,10 @@ export const translateMessageHandlers: Record<string, MessageHandler> = {
     [ACTION.TRANSLATE_TEXTS]: (message, sendResponse) => handleAbortable(
         ABORT_SCOPE.TRANSLATE, 'Translate texts', message, sendResponse,
         async (data, signal) => {
-            const { service, texts, targetLang } = data as {
-                service: string; texts: string[]; targetLang: string;
+            const { service, texts, targetLang, sourceLang, scene } = data as {
+                service: string; texts: string[]; targetLang: string; sourceLang?: string; scene?: 'subtitle';
             };
-            const results = await translateTextsWithCache(service, texts, targetLang, signal);
+            const results = await translateTextsWithCache(service, texts, targetLang, signal, sourceLang, scene);
             // `null` means "unknown service id" — content degrades silently on
             // it. A provider that failed throws instead, and handleAbortable
             // turns that into a STATUS_FAIL reply carrying the real reason.
@@ -1569,7 +1610,7 @@ export const translateMessageHandlers: Record<string, MessageHandler> = {
 async function testTranslateService(
     data: {
         service?: string; targetLang?: string; apiKey?: string; region?: string;
-        appId?: string; secretKey?: string; qps?: number;
+        appId?: string; secretKey?: string; qps?: number; model?: string;
     } | undefined,
 ): Promise<{ reply: string }> {
     const svc = data?.service;
@@ -1578,7 +1619,9 @@ async function testTranslateService(
 
     // Draft credentials typed into an Options dialog but not yet saved need a
     // one-off instance; row tests and keyless providers use the shared singletons.
-    const service = svc === TRANSLATE_SERVICE.BAIDU && data?.appId !== undefined
+    const service = svc === TRANSLATE_SERVICE.BILIBILI && data?.model !== undefined
+        ? new BilibiliTranslateService(data.model)
+        : svc === TRANSLATE_SERVICE.BAIDU && data?.appId !== undefined
         ? new BaiduTranslateService({ appId: data.appId, secretKey: data.secretKey ?? "", qps: data.qps })
         : svc === TRANSLATE_SERVICE.DEEPL && data?.apiKey !== undefined
             ? new DeepLTranslateService(data.apiKey)

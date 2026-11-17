@@ -15,37 +15,52 @@ export function applyTemplate(url: string, vars: { model: string; key: string })
         .replace(/\{key\}/g, encodeURIComponent(vars.key));
 }
 
-// Yields the `data:` payload of each complete frame, separated by blank lines.
-export async function* sseFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+export interface SseEvent { event: string; data: string }
+
+/** Preserve event names for public translation protocols; handle CRLF and EOF. */
+export async function* sseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<SseEvent> {
     const reader = body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buf = "";
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const parse = (frame: string): SseEvent | undefined => {
+        let event = 'message';
+        const data: string[] = [];
+        for (const line of frame.split(/\r\n|\n|\r/)) {
+            if (!line || line.startsWith(':')) continue;
+            const colon = line.indexOf(':');
+            const field = colon < 0 ? line : line.slice(0, colon);
+            const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /, '');
+            if (field === 'event') event = value;
+            if (field === 'data') data.push(value);
+        }
+        return data.length || event !== 'message' ? { event, data: data.join('\n') } : undefined;
+    };
     try {
         while (true) {
             const { value, done } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            let sep: number;
-            while ((sep = buf.indexOf("\n\n")) !== -1) {
-                const frame = buf.slice(0, sep);
-                buf = buf.slice(sep + 2);
-                // Concatenate multi-line `data:` payloads per SSE spec.
-                let data = "";
-                for (const rawLine of frame.split("\n")) {
-                    const line = rawLine.trim();
-                    if (!line || !line.startsWith("data:")) continue;
-                    data += (data ? "\n" : "") + line.slice(5).trim();
-                }
-                if (data) yield data;
+            buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+            let boundary: RegExpMatchArray | null;
+            while ((boundary = /\r\n\r\n|\n\n|\r\r/.exec(buffer))) {
+                const frame = buffer.slice(0, boundary.index!);
+                buffer = buffer.slice(boundary.index! + boundary[0].length);
+                const event = parse(frame);
+                if (event) yield event;
+            }
+            if (done) {
+                const event = parse(buffer);
+                if (event) yield event;
+                return;
             }
         }
     } finally {
-        // Consumers may stop early — AI_PROVIDER_TEST breaks out after ~32
-        // chars, and any aborted stream closes the generator mid-iteration.
-        // Without cancelling, the upstream response body stays open.
-        // Fire-and-forget: cancel() on an already-closed reader can reject, and
-        // this must never block the generator's teardown.
         void reader.cancel().catch(() => { });
+        reader.releaseLock();
+    }
+}
+
+export async function* sseFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+    for await (const event of sseEvents(body)) {
+        if (event.data) yield event.data;
     }
 }
 

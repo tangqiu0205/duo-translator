@@ -9,6 +9,7 @@
 
 import { ACTION, AI_TASK, CONFIG_KEY, DEFAULT_VALUE, LANGUAGES_MAP, PORT_NAME } from "@/main/constants";
 import { browser } from "wxt/browser";
+import { fetchProviderModels } from "@/main/aiModels";
 import { normalizeProvider } from "@/main/aiProvider";
 import type {
     AiProvider,
@@ -173,6 +174,7 @@ export async function* openAiChatStream(
             ...(opts.params !== undefined ? opts.params : {})
         }),
         signal: opts.signal,
+        ...(opts.credentials ? { credentials: opts.credentials, redirect: 'error' as const } : {}),
     });
 
     if (!resp.ok || !resp.body) {
@@ -182,13 +184,11 @@ export async function* openAiChatStream(
 
     for await (const data of sseFrames(resp.body)) {
         if (data === "[DONE]") return;
-        try {
-            const json = JSON.parse(data);
-            const delta: string | undefined = json?.choices?.[0]?.delta?.content;
-            if (typeof delta === "string" && delta.length > 0) yield delta;
-        } catch {
-            /* ignore keep-alive comments / malformed lines */
-        }
+        let json: any;
+        try { json = JSON.parse(data); } catch { continue; }
+        if (json?.error) throw new Error(`AI stream failed: ${json.error.message || JSON.stringify(json.error)}`);
+        const delta: string | undefined = json?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta.length > 0) yield delta;
     }
 }
 
@@ -370,6 +370,7 @@ export async function openAiChatComplete(
             ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
         }),
         signal: opts.signal,
+        ...(opts.credentials ? { credentials: opts.credentials, redirect: 'error' as const } : {}),
     });
 
     if (!resp.ok) {
@@ -656,6 +657,11 @@ type MessageHandler = (message: any, sendResponse: (r: any) => void) => boolean 
 
 /** AI actions handled in background, keyed by ACTION. Consumed by background.ts. */
 export const aiMessageHandlers: Record<string, MessageHandler> = {
+    [ACTION.AI_PROVIDER_MODELS]: (message, sendResponse) =>
+        handleAsync('AI provider models', sendResponse, async () => ({
+            models: await fetchProviderModels(normalizeProvider(message.data)),
+        })),
+
     [ACTION.AI_PROVIDER_TEST]: (message, sendResponse) => {
         // Options sends the whole provider record — possibly an unsaved draft,
         // possibly disabled — so it is used as-is rather than resolved by id.

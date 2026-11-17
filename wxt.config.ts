@@ -30,7 +30,8 @@ export default defineConfig({
         default_locale: 'en',
         // 'identity' powers Google Drive sync (launchWebAuthFlow everywhere,
         // getAuthToken on Chrome). It shows no user-visible install warning.
-        permissions: ['storage', 'tabs', 'activeTab', 'contextMenus', 'alarms', 'webNavigation', 'identity'],
+        permissions: ['storage', 'tabs', 'activeTab', 'contextMenus', 'alarms', 'webNavigation', 'identity',
+            browser === 'safari' ? 'declarativeNetRequest' : 'declarativeNetRequestWithHostAccess'],
         host_permissions: [
             // firefox needs these (the firefox target is MV3 too -- see the
             // `--mv3` flag on the firefox scripts in package.json)
@@ -38,6 +39,9 @@ export default defineConfig({
             'https://api.cognitive.microsofttranslator.com/*',
             'https://translation.googleapis.com/*',
             'https://fanyi-api.baidu.com/*',
+            // Public translators: fixed endpoints, no cookie-reading permission.
+            'https://index-translate.bilibili.com/*',
+            'https://www.doubao.com/*',
             // 'https://api-free.deepl.com/*',
             //
             // Google Drive sync: the Drive REST API + the userinfo endpoint,
