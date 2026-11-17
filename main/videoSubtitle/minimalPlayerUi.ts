@@ -36,9 +36,9 @@ export interface MinimalPlayerUiController {
     destroy(): void;
 }
 
-const STYLE_ID = "duo-yt-minimal-ui-style";
+const STYLE_ID = "fluento-yt-minimal-ui-style";
 /** Set on `<html>` while the band-gated chrome must stay hidden. */
-const CONTROLS_HIDDEN_ATTR = "data-duo-yt-controls-hidden";
+const CONTROLS_HIDDEN_ATTR = "data-fluento-yt-controls-hidden";
 /**
  * Set on `<html>` while the page is fullscreen (and the feature is on).
  *
@@ -47,7 +47,7 @@ const CONTROLS_HIDDEN_ATTR = "data-duo-yt-controls-hidden";
  * not the player, so `#movie_player:fullscreen` would never match — while
  * `document.fullscreenElement !== null` is true whichever element it is.
  */
-const FULLSCREEN_ATTR = "data-duo-yt-fullscreen";
+const FULLSCREEN_ATTR = "data-fluento-yt-fullscreen";
 
 /**
  * Chrome that comes back when the pointer reaches the bottom band: the toolbar

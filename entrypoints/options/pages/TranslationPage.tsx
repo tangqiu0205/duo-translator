@@ -146,7 +146,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
 
   // Preview hover state
   const [hoverPart, setHoverPart] = useState<1 | 2 | null>(null);
-  // Preview stand-in for `.duo-translation:hover` (dim / blur lift on hover).
+  // Preview stand-in for `.fluento-translation:hover` (dim / blur lift on hover).
   const [translationHovered, setTranslationHovered] = useState(false);
 
   // Domain lists
@@ -548,7 +548,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
   }) as string;
 
   // The two attenuating styles hand the paragraph back on hover, which the page
-  // gets from `.duo-translation:hover` — the preview has to reproduce it, or it
+  // gets from `.fluento-translation:hover` — the preview has to reproduce it, or it
   // shows a permanently unreadable translation.
   const translationStyle = useMemo(
     () =>

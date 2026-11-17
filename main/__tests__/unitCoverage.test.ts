@@ -54,7 +54,7 @@ describe("planUnit — never translated", () => {
 describe("planUnit — already translated and unchanged", () => {
     it("skips a run whose translation sits next to it (DOUBLE marker, no record)", () => {
         const p = el(
-            '<p>Hello world.<br class="duo-divide"><span class="duo-translation">你好</span></p>'
+            '<p>Hello world.<br class="fluento-divide"><span class="fluento-translation">你好</span></p>'
         );
         expect(planUnit(segmentParagraph(p).units[0], undefined, undefined).action).toBe("skip");
     });
@@ -70,16 +70,16 @@ describe("planUnit — already translated and unchanged", () => {
     });
 
     // A block inserted between the run and its translation flushes the run
-    // before `.duo-translation` is seen, so the adjacency signal goes false and
+    // before `.fluento-translation` is seen, so the adjacency signal goes false and
     // the paragraph would be translated a second time. The record still knows.
     it("skips when a block was inserted between the run and its translation", () => {
         const p = el(
-            '<p>Hello world.<br class="duo-divide"><span class="duo-translation">你好</span></p>'
+            '<p>Hello world.<br class="fluento-divide"><span class="fluento-translation">你好</span></p>'
         );
         const covered = [p.firstChild as Text];
         const toolbar = document.createElement("div");
         toolbar.textContent = "Share";
-        p.insertBefore(toolbar, p.querySelector(".duo-divide"));
+        p.insertBefore(toolbar, p.querySelector(".fluento-divide"));
 
         const unit = unitOf(p, p.firstChild!);
         expect(unit.translated).toBe(false); // the adjacency signal is gone
@@ -95,20 +95,20 @@ describe("planUnit — already translated and unchanged", () => {
         expect(planUnit(unit, [{ covered }], undefined).action).toBe("skip");
     });
 
-    // The <duo-span> highlight fallback empties the run's own text nodes and
+    // The <fluento-span> highlight fallback empties the run's own text nodes and
     // puts the text into wrappers of ours. Counting those as page content would
     // mark every highlighted paragraph as changed on the very next scan.
     it("does not read its own highlight wrappers as new page content", () => {
         const p = el("<p>Hello world.</p>");
         const original = p.firstChild as Text;
-        const wrapper = document.createElement("duo-span");
+        const wrapper = document.createElement("fluento-span");
         wrapper.textContent = original.textContent;
         p.insertBefore(wrapper, original);
         original.textContent = "";
         const divide = document.createElement("br");
-        divide.className = "duo-divide";
+        divide.className = "fluento-divide";
         const translation = document.createElement("span");
-        translation.className = "duo-translation";
+        translation.className = "fluento-translation";
         translation.textContent = "你好世界。";
         p.append(divide, translation);
 
@@ -164,9 +164,9 @@ describe("planUnit — the run changed", () => {
         const p = el("<p><span>Hello </span><span>brave world.</span></p>");
         const record = { covered: textsIn(p) };
         const divide = document.createElement("br");
-        divide.className = "duo-divide";
+        divide.className = "fluento-divide";
         const translation = document.createElement("span");
-        translation.className = "duo-translation";
+        translation.className = "fluento-translation";
         translation.textContent = "你好，勇敢的世界。";
         p.append(divide, translation);
         // The page appends AFTER our translation — segmentation steps over the
@@ -176,7 +176,7 @@ describe("planUnit — the run changed", () => {
         p.appendChild(late);
 
         const unit = unitOf(p, late);
-        expect(planUnit(unit, [record], undefined)).toEqual({ action: "replace", duo: record });
+        expect(planUnit(unit, [record], undefined)).toEqual({ action: "replace", bilingual: record });
     });
 
     it("asks to replace when part of the covered run was removed", () => {
@@ -196,9 +196,9 @@ describe("planUnit — the run changed", () => {
         const p = el("<p>Hello world.</p>");
         const covered = [p.firstChild as Text];
         const divide = document.createElement("br");
-        divide.className = "duo-divide";
+        divide.className = "fluento-divide";
         const translation = document.createElement("span");
-        translation.className = "duo-translation";
+        translation.className = "fluento-translation";
         translation.textContent = "你好世界。";
         p.append(divide, translation);
         p.appendChild(document.createElement("span")).textContent = "New";

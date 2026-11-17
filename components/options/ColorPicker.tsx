@@ -162,7 +162,7 @@ export function ColorPicker({ value, selectedIndex, presets, onChange, className
             className="z-[2147483700] rounded-xl border border-line bg-surface p-3 shadow-[0_12px_28px_-8px_rgba(0,0,0,.6),0_0_0_0.5px_rgba(255,255,255,.04)]"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="duo-color-picker">
+            <div className="fluento-color-picker">
               <HexColorPicker color={customColor} onChange={handlePopoverChange} />
             </div>
             <div className="mt-3 flex items-center gap-2">

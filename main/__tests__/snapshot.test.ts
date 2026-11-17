@@ -51,6 +51,7 @@ vi.mock("@/main/storage/configStore", async (importOriginal) => {
 import {
     applyImportedSnapshot,
     buildSnapshot,
+    isValidSnapshot,
     mergeSnapshots,
     redactSecrets,
     type Snapshot,
@@ -74,6 +75,15 @@ function snapshot(data: Record<string, unknown>): Snapshot {
         tombstones: {},
     };
 }
+
+it('writes Fluento snapshots and refuses upstream backups without importing any data', async () => {
+    const own = await buildSnapshot();
+    expect(own.app).toBe('fluento');
+    const upstream = { ...snapshot({ [TARGET_LANG_KEY]: 'ja' }), app: 'duo-translator' };
+    expect(isValidSnapshot(upstream)).toBe(false);
+    await expect(applyImportedSnapshot(upstream as Snapshot)).rejects.toThrow();
+    expect(store).not.toHaveProperty(TARGET_LANG_KEY);
+});
 
 /** The device already has two providers with live keys plus a DeepL key. */
 function seedLocalKeys() {
@@ -215,23 +225,23 @@ describe("applyImportedSnapshot — envelope", () => {
 
 // Internal keys must not ride along in a snapshot. This is not hypothetical:
 // buildSnapshot used to take all of storage.local minus an explicit deny-list,
-// so `__site_rule_cache` (hundreds of re-fetchable subscription bodies) was
+// so `__fluento_site_rule_cache` (hundreds of re-fetchable subscription bodies) was
 // uploaded on every sync while three separate comments claimed it was not. The
 // gate is now an allow-list (isSnapshotKey) applied at all three boundaries.
 describe("snapshot boundaries — internal keys never sync", () => {
-    const CACHE_KEY = "__site_rule_cache";
-    const GDRIVE_PREF = "__sync_gdrive_use_browser_auth";
+    const CACHE_KEY = "__fluento_site_rule_cache";
+    const GDRIVE_PREF = "__fluento_sync_gdrive_use_browser_auth";
 
     it("buildSnapshot omits internal keys but keeps user data", async () => {
         store[TARGET_LANG_KEY] = "ja";
         store[CACHE_KEY] = [{ id: "r1" }, { id: "r2" }];
         store[GDRIVE_PREF] = true;
-        store["domain_example.com"] = { strategy: "always" };
+        store["fluento_domain_example.com"] = { strategy: "always" };
 
         const snap = await buildSnapshot();
 
         expect(Object.keys(snap.data)).toEqual(
-            expect.arrayContaining([TARGET_LANG_KEY, "domain_example.com"]),
+            expect.arrayContaining([TARGET_LANG_KEY, "fluento_domain_example.com"]),
         );
         expect(snap.data).not.toHaveProperty(CACHE_KEY);
         expect(snap.data).not.toHaveProperty(GDRIVE_PREF);

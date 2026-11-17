@@ -43,7 +43,7 @@ vi.mock("@/main/videoSubtitle/controls", () => ({
 vi.mock("@/main/videoSubtitle/overlay", () => ({
     SubtitleOverlay: class {
         private readonly box = document.createElement("div");
-        constructor(player: HTMLElement) { this.box.id = "duo-video-subtitle-box"; player.append(this.box); }
+        constructor(player: HTMLElement) { this.box.id = "fluento-video-subtitle-box"; player.append(this.box); }
         destroy() { this.box.remove(); }
         hide() { }
         show() { }

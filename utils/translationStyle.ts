@@ -83,7 +83,7 @@ export function resolveColorIndex(color: string, index: number, presets: string[
 // the page will actually paint, not a box the page cannot draw.
 // `quoteBorderColor` colors the quote style's leading bar; `hovered` previews the
 // hover state of the two attenuating styles (dim / blur), which the page gets
-// from `.duo-translation:hover`.
+// from `.fluento-translation:hover`.
 export function buildStylePreview(opts: {
   style: string;
   bgColor?: string;

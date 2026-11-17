@@ -5,11 +5,11 @@
  * the page context.
  */
 
-export const YT_BRIDGE_REQUEST = "DUO_YT_GET_PLAYER_DATA";
-export const YT_BRIDGE_RESPONSE = "DUO_YT_PLAYER_DATA";
+export const YT_BRIDGE_REQUEST = "FLUENTO_YT_GET_PLAYER_DATA";
+export const YT_BRIDGE_RESPONSE = "FLUENTO_YT_PLAYER_DATA";
 /** Ask the bridge to make the player fetch a caption track (json3 body). */
-export const YT_BRIDGE_TRACK_REQUEST = "DUO_YT_REQUEST_TRACK";
-export const YT_BRIDGE_TRACK_RESPONSE = "DUO_YT_TRACK_DATA";
+export const YT_BRIDGE_TRACK_REQUEST = "FLUENTO_YT_REQUEST_TRACK";
+export const YT_BRIDGE_TRACK_RESPONSE = "FLUENTO_YT_TRACK_DATA";
 
 export interface YtBridgeCaptionTrack {
     baseUrl: string;

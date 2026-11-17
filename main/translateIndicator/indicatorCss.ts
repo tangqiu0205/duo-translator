@@ -45,18 +45,18 @@ ${TAG} {
     user-select: none;
     -webkit-user-select: none;
 }
-${TAG} .duo-loading-dot {
+${TAG} .fluento-loading-dot {
     display: inline-block;
     box-sizing: border-box;
     width: 5px;
     height: 5px;
     border-radius: 50%;
     background: #888;
-    animation: duo-loading-bounce 1.1s infinite ease-in-out both;
+    animation: fluento-loading-bounce 1.1s infinite ease-in-out both;
 }
-${TAG} .duo-loading-dot:nth-child(2) { animation-delay: 0.15s; }
-${TAG} .duo-loading-dot:nth-child(3) { animation-delay: 0.3s; }
-${TAG} .duo-loading-spin {
+${TAG} .fluento-loading-dot:nth-child(2) { animation-delay: 0.15s; }
+${TAG} .fluento-loading-dot:nth-child(3) { animation-delay: 0.3s; }
+${TAG} .fluento-loading-spin {
     display: inline-block;
     box-sizing: border-box;
     width: 13px;
@@ -64,9 +64,9 @@ ${TAG} .duo-loading-spin {
     border-radius: 50%;
     border: 2px solid #888;
     border-top-color: transparent;
-    animation: duo-loading-spin 0.7s linear infinite;
+    animation: fluento-loading-spin 0.7s linear infinite;
 }
-${TAG} .duo-loading-btn {
+${TAG} .fluento-loading-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -84,10 +84,10 @@ ${TAG} .duo-loading-btn {
        that darkens a light page and lightens a dark one. */
     transition: background-color 0.15s ease;
 }
-${TAG} .duo-loading-btn:hover {
+${TAG} .fluento-loading-btn:hover {
     background: rgba(128, 128, 128, 0.28);
 }
-${TAG} .duo-loading-btn svg {
+${TAG} .fluento-loading-btn svg {
     display: block;
     width: 13px;
     height: 13px;
@@ -97,20 +97,20 @@ ${TAG} .duo-loading-btn svg {
     stroke-linecap: round;
     stroke-linejoin: round;
 }
-${TAG} .duo-loading-details { color: #e5534b; }
-@keyframes duo-loading-bounce {
+${TAG} .fluento-loading-details { color: #e5534b; }
+@keyframes fluento-loading-bounce {
     /* Transform only. Fading the dot would eat into the contrast the grey was
        chosen for — at 0.5 opacity #888 on white is below the 3:1 an icon needs,
        and the bounce already carries the animation on its own. */
     0%, 80%, 100% { transform: translateY(0); }
     40% { transform: translateY(-4px); }
 }
-@keyframes duo-loading-spin {
+@keyframes fluento-loading-spin {
     to { transform: rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-    ${TAG} .duo-loading-dot,
-    ${TAG} .duo-loading-spin {
+    ${TAG} .fluento-loading-dot,
+    ${TAG} .fluento-loading-spin {
         animation: none;
     }
 }

@@ -14,7 +14,7 @@ import { guardExtensionAlive } from "@/main/extensionDisabledNotice";
 import { getViewportSize } from "@/utils/dom";
 import { useDraggable } from "./useDraggable";
 import { useFullscreen } from "./useFullscreen";
-import { DUO_LOGO_SVG } from "./logo";
+import { FLUENTO_LOGO_SVG } from "./logo";
 
 /**
  * Float ball is a pure UI surface. It does NOT own any business state
@@ -52,7 +52,7 @@ export interface FloatBallController {
     destroy(): void;
 }
 
-const HOST_ID = "duo-float-ball-host";
+const HOST_ID = "fluento-float-ball-host";
 // Grace period before collapsing the expanded toolbar after the pointer leaves —
 // tolerates brief excursions (e.g. to the close menu) without flicker.
 const COLLAPSE_DELAY_MS = 150;
@@ -128,7 +128,7 @@ export async function mountFloatBall(deps: FloatBallDeps): Promise<FloatBallCont
 
     const host = document.createElement("div");
     host.id = HOST_ID;
-    host.setAttribute("data-duo-float-ball", "");
+    host.setAttribute("data-fluento-float-ball", "");
     // Attach to <html> rather than <body> so SPA frameworks that wipe/replace
     // the body element don't take the ball down with them. Frameworks that
     // rebuild <html>'s children still remove it — keepHostMounted re-attaches.
@@ -137,7 +137,7 @@ export async function mountFloatBall(deps: FloatBallDeps): Promise<FloatBallCont
     const shadow = attachOwnShadow(host);
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     const stopThemeWatch = bindThemeToElement(mount);
     const root = createRoot(mount);
@@ -515,7 +515,7 @@ function FloatBallApp({
                         <span
                             aria-hidden="true"
                             className="block h-6 w-6"
-                            dangerouslySetInnerHTML={{ __html: DUO_LOGO_SVG }}
+                            dangerouslySetInnerHTML={{ __html: FLUENTO_LOGO_SVG }}
                         />
                         {active && (
                             <span

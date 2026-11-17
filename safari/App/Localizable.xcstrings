@@ -41,7 +41,7 @@
         }
       }
     },
-    "Duo Translator for Safari" : {
+    "Fluento for Safari" : {
       "shouldTranslate" : false
     },
     "Enabled in Safari" : {
@@ -97,12 +97,12 @@
         }
       }
     },
-    "Turn on Duo Translator for Safari under Safari › Settings › Extensions." : {
+    "Turn on Fluento for Safari under Safari › Settings › Extensions." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Safari › 设置 › 扩展 中打开 Duo Translator for Safari。"
+            "value" : "在 Safari › 设置 › 扩展 中打开 Fluento for Safari。"
           }
         }
       }

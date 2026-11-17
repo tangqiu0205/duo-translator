@@ -52,7 +52,7 @@ function button(className: string, label: string, paths: string, onClick: (el: H
     // arbitrary page content, where a `button {}` rule in the site's stylesheet
     // would restyle it, and a form ancestor would make it a submit button.
     const el = document.createElement("span");
-    el.className = `duo-loading-btn ${className}`;
+    el.className = `fluento-loading-btn ${className}`;
     el.setAttribute("role", "button");
     el.setAttribute("tabindex", "0");
     // `title`/`aria-label` rather than a text node: the marker must carry no
@@ -93,7 +93,7 @@ export function mountInlineIndicator(unit: TranslationUnit, variant: InlineVaria
     const anchor = anchorOf(unit);
     if (!anchor) return null;
     const el = document.createElement(TRANSLATE_INDICATOR_TAG);
-    el.setAttribute("data-duo-anim", variant);
+    el.setAttribute("data-fluento-anim", variant);
     // Our own UI: never translated, never sampled for language detection, and
     // unaffected by "translate every element on this site" (the `own` set is
     // the one that switch cannot turn off).
@@ -109,18 +109,18 @@ export function mountInlineIndicator(unit: TranslationUnit, variant: InlineVaria
 
 function renderBusy(el: HTMLElement, variant: InlineVariant): void {
     el.replaceChildren();
-    el.classList.remove("duo-loading-error");
+    el.classList.remove("fluento-loading-error");
     el.setAttribute("role", "status");
     el.setAttribute("aria-label", t("translatingStatus", "Translating…"));
     if (variant === "spinner") {
         const spin = document.createElement("span");
-        spin.className = "duo-loading-spin";
+        spin.className = "fluento-loading-spin";
         el.appendChild(spin);
         return;
     }
     for (let i = 0; i < 3; i++) {
         const dot = document.createElement("span");
-        dot.className = "duo-loading-dot";
+        dot.className = "fluento-loading-dot";
         el.appendChild(dot);
     }
 }
@@ -128,17 +128,17 @@ function renderBusy(el: HTMLElement, variant: InlineVariant): void {
 /** Turn a busy marker into the failure pair: details + retry. */
 export function renderInlineError(el: HTMLElement, handlers: InlineErrorHandlers): void {
     el.replaceChildren();
-    el.classList.add("duo-loading-error");
+    el.classList.add("fluento-loading-error");
     el.setAttribute("role", "alert");
     el.removeAttribute("aria-label");
     el.appendChild(button(
-        "duo-loading-details",
+        "fluento-loading-details",
         t("translateIndicatorDetails", "Translation failed — show details"),
         ICON_ALERT,
         handlers.onDetails,
     ));
     el.appendChild(button(
-        "duo-loading-retry",
+        "fluento-loading-retry",
         t("translateIndicatorRetry", "Retry"),
         ICON_RETRY,
         handlers.onRetry,

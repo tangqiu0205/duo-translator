@@ -2,7 +2,7 @@
 // Website translation rules — shared data model.
 //
 // NOTE ON NAMING: the word "rule" was already taken in this repo by the
-// per-host no-translate selector list (`rule_<host>`, `ruleRepo`, ruleMode.ts,
+// per-host no-translate selector list (`fluento_rule_<host>`, `ruleRepo`, ruleMode.ts,
 // DB_ACTION.RULE_*). That system is untouched and keeps its name. Everything in
 // this feature is namespaced `siteRule` — do not merge the two namespaces.
 //

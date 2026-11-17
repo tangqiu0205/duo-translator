@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = new URL('../', import.meta.url);
-const logo = readFileSync(new URL('public/DuoTranslator.svg', root), 'utf8');
+const logo = readFileSync(new URL('public/Fluento.svg', root), 'utf8');
 // Trim the brand artwork's outer padding for the browser's fixed 16px slot.
 const toolbar = logo.replace('viewBox="0 0 1024 1024"', 'viewBox="48 64 928 928"');
 const glyph = logo.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');

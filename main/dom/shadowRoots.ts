@@ -10,8 +10,8 @@
 //     would otherwise walk straight into them and *translate our own interface*,
 //     and main/lang.ts would sample our UI copy into the page-language vote.
 //     A registry — not an attribute selector — is the authority here: the hosts
-//     do not share one marker attribute (`data-duo-ai-ui` vs `data-duo-rule-ui`
-//     vs `data-duo-float-ball`) and the video-subtitle host is mounted *inside*
+//     do not share one marker attribute (`data-fluento-ai-ui` vs `data-fluento-rule-ui`
+//     vs `data-fluento-float-ball`) and the video-subtitle host is mounted *inside*
 //     page content, where the scan really does reach it.
 //
 //   - **discovery** — every page-owned root we know about, so the content
@@ -220,7 +220,7 @@ function collectInto(out: Element[], scope: ParentNode, selector: string): void 
 /**
  * `querySelectorAll` across the light DOM and every known shadow root. Results
  * are grouped by tree, NOT in composed document order — callers that enumerate
- * (`.duo-selected`, leftover sweeps) do not care, and imposing an order would
+ * (`.fluento-selected`, leftover sweeps) do not care, and imposing an order would
  * cost a full composed-tree walk.
  */
 export function deepQuerySelectorAll(selector: string, scope: ParentNode = document): Element[] {

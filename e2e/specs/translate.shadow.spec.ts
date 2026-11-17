@@ -42,18 +42,18 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
         await page.goto('/shadow-dom.html');
 
         // Light DOM keeps working — the regression guard for the whole change.
-        await expect(page.locator('#l1 .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#l1 .fluento-translation')).toContainText(ZH);
 
         await expect
-            .poll(() => countInRoot(page, '#open-host', '#s1 > .duo-divide + .duo-translation'))
+            .poll(() => countInRoot(page, '#open-host', '#s1 > .fluento-divide + .fluento-translation'))
             .toBe(1);
-        expect(await textInRoot(page, '#open-host', '.duo-translation')).toContain(ZH);
+        expect(await textInRoot(page, '#open-host', '.fluento-translation')).toContain(ZH);
 
         // The two inline spans are ONE unit, so exactly one translation for #s2.
-        await expect.poll(() => countInRoot(page, '#open-host', '#s2 > .duo-translation')).toBe(1);
+        await expect.poll(() => countInRoot(page, '#open-host', '#s2 > .fluento-translation')).toBe(1);
         const s2 = await page.evaluate(() => {
             const root = (document.querySelector('#open-host') as HTMLElement).shadowRoot!;
-            return root.querySelector('#s2 > .duo-translation')?.textContent ?? '';
+            return root.querySelector('#s2 > .fluento-translation')?.textContent ?? '';
         });
         // One unit spanning both spans — the mock prefixes each inline segment,
         // so the single translation carries both halves.
@@ -69,7 +69,7 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
                 page.evaluate(() => {
                     const outer = (document.querySelector('#open-host') as HTMLElement).shadowRoot!;
                     const nested = (outer.getElementById('nest-host') as HTMLElement).shadowRoot;
-                    return nested ? nested.querySelectorAll('.duo-translation').length : -1;
+                    return nested ? nested.querySelectorAll('.fluento-translation').length : -1;
                 }),
             )
             .toBe(1);
@@ -77,31 +77,31 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
 
     test('a block-level component gets its shadow body translated', async ({ page }) => {
         await page.goto('/shadow-dom.html');
-        await expect.poll(() => countInRoot(page, '#card', '#c1 > .duo-divide + .duo-translation')).toBe(1);
+        await expect.poll(() => countInRoot(page, '#card', '#c1 > .fluento-divide + .fluento-translation')).toBe(1);
     });
 
     test('slotted content is translated exactly once, in the light DOM', async ({ page }) => {
         await page.goto('/shadow-dom.html');
 
         // The <p> lives in the light DOM and renders through the slot.
-        await expect(page.locator('#slotted .duo-translation')).toContainText(ZH);
-        await expect(page.locator('#slotted > .duo-translation')).toHaveCount(1);
+        await expect(page.locator('#slotted .fluento-translation')).toContainText(ZH);
+        await expect(page.locator('#slotted > .fluento-translation')).toHaveCount(1);
         // Nothing duplicated into the wrapper's own tree.
-        expect(await countInRoot(page, '#wrap', '.duo-translation')).toBe(0);
+        expect(await countInRoot(page, '#wrap', '.fluento-translation')).toBe(0);
     });
 
     test('an inline icon component does not split the sentence', async ({ page }) => {
         await page.goto('/shadow-dom.html');
 
-        await expect(page.locator('#inline-ce > .duo-translation')).toHaveCount(1);
-        const translated = await page.locator('#inline-ce > .duo-translation').textContent();
+        await expect(page.locator('#inline-ce > .fluento-translation')).toHaveCount(1);
+        const translated = await page.locator('#inline-ce > .fluento-translation').textContent();
         // One request for the whole sentence — both halves in one translation.
         expect(translated).toContain('Click');
         expect(translated).toContain('to continue reading the guide.');
         // The icon's own tree is left alone.
         const iconTranslations = await page.evaluate(() => {
             const icon = document.querySelector('#inline-ce x-icon') as HTMLElement;
-            return icon.shadowRoot!.querySelectorAll('.duo-translation').length;
+            return icon.shadowRoot!.querySelectorAll('.fluento-translation').length;
         });
         expect(iconTranslations).toBe(0);
     });
@@ -123,12 +123,12 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
         // runs after it, so the root is already there when we scan (covered by
         // the tests above).
         await page.goto('/shadow-dom.html');
-        await expect(page.locator('#l1 .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#l1 .fluento-translation')).toContainText(ZH);
 
         await page.click('#late');
 
         await page.waitForTimeout(1500);
-        expect(await countInRoot(page, '#late-host', '.duo-translation')).toBe(0);
+        expect(await countInRoot(page, '#late-host', '.fluento-translation')).toBe(0);
     });
 
     test('a CLOSED root stays closed and untranslated', async ({ page }) => {
@@ -143,7 +143,7 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
 
         // Sync point: the open-root work is done, so the scan has been past
         // #closed-host too and its absence below means "skipped", not "not yet".
-        await expect.poll(() => countInRoot(page, '#open-host', '.duo-translation')).toBeGreaterThan(0);
+        await expect.poll(() => countInRoot(page, '#open-host', '.fluento-translation')).toBeGreaterThan(0);
 
         expect(
             await page.evaluate(
@@ -154,14 +154,14 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
         // Reached through the page's own handle, which is the only way in now.
         expect(
             await page.evaluate(
-                () => (window as any).__closedRoot.querySelectorAll('.duo-translation').length,
+                () => (window as any).__closedRoot.querySelectorAll('.fluento-translation').length,
             ),
         ).toBe(0);
     });
 
     test('restore removes every shadow translation and leaves the text byte-identical', async ({ page, serviceWorker }) => {
         await page.goto('/shadow-dom.html');
-        await expect.poll(() => countInRoot(page, '#open-host', '.duo-translation')).toBeGreaterThan(0);
+        await expect.poll(() => countInRoot(page, '#open-host', '.fluento-translation')).toBeGreaterThan(0);
 
         await sendAction(serviceWorker, 'showOriginal');
 
@@ -173,12 +173,12 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
                 let n = 0;
                 for (const h of hosts) {
                     const root = (document.querySelector(h) as HTMLElement | null)?.shadowRoot;
-                    if (root) n += root.querySelectorAll('.duo-translation, .duo-divide').length;
+                    if (root) n += root.querySelectorAll('.fluento-translation, .fluento-divide').length;
                 }
                 return n;
             }),
         ).toBe(0);
-        await expect(page.locator('.duo-translation')).toHaveCount(0);
+        await expect(page.locator('.fluento-translation')).toHaveCount(0);
 
         // Original text survived the round trip untouched.
         expect(await textInRoot(page, '#open-host', '#s1')).toBe('Shadow paragraph one.');
@@ -186,6 +186,6 @@ test.describe('@shadow shadow DOM (mocked providers)', () => {
 
         // …and re-translating works from that clean state.
         await sendAction(serviceWorker, 'translate');
-        await expect.poll(() => countInRoot(page, '#open-host', '.duo-translation')).toBeGreaterThan(0);
+        await expect.poll(() => countInRoot(page, '#open-host', '.fluento-translation')).toBeGreaterThan(0);
     });
 });

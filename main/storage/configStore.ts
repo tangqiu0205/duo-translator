@@ -1,31 +1,25 @@
 // Centralized storage layer backed by `wxt/utils/storage` (chrome.storage.local).
 //
-// Replaces the three PouchDB-backed classes (ConfigStorage / DomainStorage /
-// RuleStorage) that used to live in main/background.ts. The message-handler
-// contract in background.ts and the renderer-facing helpers in utils/db.ts
-// stay unchanged; only the storage engine swaps.
-//
-// All keys live in the `local:` storage area with prefixes preserved from the
-// PouchDB era so migration is a 1:1 copy:
-//   config_<name>   →  config value (any)
-//   domain_<host>   →  { strategy?, viewStrategy?, aiWritingDisabled?, aiWritingEnabled? }
-//   rule_<host>     →  string[]
+// Fluento uses an independent namespace. No upstream data is imported.
+// All user-data keys live in the `local:` storage area:
+//   fluento_config_<name>   →  config value (any)
+//   fluento_domain_<host>   →  { strategy?, viewStrategy?, aiWritingDisabled?, aiWritingEnabled? }
+//   fluento_rule_<host>     →  string[]
 //
 // Internal book-keeping keys. They carry no data prefix, which is what keeps
 // them out of snapshots — `isSnapshotKey` in snapshot.ts is an allow-list over
 // the three prefixes above, applied at every snapshot boundary:
-//   __migration_v1_done              — set after the one-shot PouchDB → storage migration
-//   __sync_meta                      — per-key LWW clocks + tombstones (see SyncMeta)
-//   __sync_active_provider           — the "sync method" selector; which provider
+//   __fluento_sync_meta                      — per-key LWW clocks + tombstones (see SyncMeta)
+//   __fluento_sync_active_provider           — the "sync method" selector; which provider
 //                                      auto-sync targets (syncManager.ts)
-//   __sync_gdrive_tokens             — OAuth tokens
-//   __sync_gdrive_file_id            — cached Drive fileId
-//   __sync_gdrive_needs_reauth       — credentials went stale on THIS device
-//   __sync_gdrive_use_browser_auth   — Chrome-only: getAuthToken vs the web flow
-//   __sync_webdav_creds              — { baseUrl, username, password, basePath }
-//   __sync_webdav_disconnected       — disconnected but keeping the credentials
-//   __site_rule_cache                — fetched subscription bodies (re-fetchable)
-//   __site_rule_official             — the official subscription package
+//   __fluento_sync_gdrive_tokens             — OAuth tokens
+//   __fluento_sync_gdrive_file_id            — cached Drive fileId
+//   __fluento_sync_gdrive_needs_reauth       — credentials went stale on THIS device
+//   __fluento_sync_gdrive_use_browser_auth   — Chrome-only: getAuthToken vs the web flow
+//   __fluento_sync_webdav_creds              — { baseUrl, username, password, basePath }
+//   __fluento_sync_webdav_disconnected       — disconnected but keeping the credentials
+//   __fluento_site_rule_cache                — fetched subscription bodies (re-fetchable)
+//   __fluento_site_rule_official             — the official subscription package
 
 import { storage, type StorageItemKey } from 'wxt/utils/storage';
 import {
@@ -38,9 +32,9 @@ import { collectionIdentity, indexElements } from './collections';
 import { stableStr } from './stableJson';
 
 export const STORAGE_PREFIX = {
-    CONFIG: 'config_',
-    DOMAIN: 'domain_',
-    RULE: 'rule_',
+    CONFIG: 'fluento_config_',
+    DOMAIN: 'fluento_domain_',
+    RULE: 'fluento_rule_',
 } as const;
 
 // Internal, device-local storage keys. Since `isSnapshotKey` became the gate on
@@ -48,20 +42,18 @@ export const STORAGE_PREFIX = {
 // anyway; naming them here is belt-and-braces and, more usefully, the one place
 // that states which keys are deliberately device-local.
 export const INTERNAL_STORAGE_KEYS = [
-    '__migration_v1_done',
-    '__sync_meta',
-    '__sync_local_mtime', // legacy, kept excluded so any stale value never syncs
-    '__sync_active_provider',
-    '__sync_gdrive_tokens',
-    '__sync_gdrive_file_id',
-    '__sync_gdrive_needs_reauth',
-    '__sync_gdrive_use_browser_auth',
-    '__sync_webdav_creds',
-    '__sync_webdav_disconnected',
+    '__fluento_sync_meta',
+    '__fluento_sync_active_provider',
+    '__fluento_sync_gdrive_tokens',
+    '__fluento_sync_gdrive_file_id',
+    '__fluento_sync_gdrive_needs_reauth',
+    '__fluento_sync_gdrive_use_browser_auth',
+    '__fluento_sync_webdav_creds',
+    '__fluento_sync_webdav_disconnected',
     // Re-fetchable subscription bodies. Hundreds of rules; nothing here that a
     // refresh can't rebuild, so there is no reason to carry it in every sync.
-    '__site_rule_cache',
-    '__site_rule_official',
+    '__fluento_site_rule_cache',
+    '__fluento_site_rule_official',
 ] as const;
 
 export type DomainDoc = {
@@ -116,13 +108,13 @@ export type SyncMeta = {
      * Element-level clocks for *collection* keys (see storage/collections.ts):
      * keys whose value is an array of independent elements. Nesting the clocks
      * here rather than inside the stored value keeps every reader of
-     * AI_PROVIDERS / SITE_RULE_* / rule_<host> untouched — the stored shape is
+     * AI_PROVIDERS / SITE_RULE_* / fluento_rule_<host> untouched — the stored shape is
      * still a plain array.
      */
     elements: Record<string, ElementSyncMeta>;
 };
 
-const META_KEY: StorageItemKey = 'local:__sync_meta';
+const META_KEY: StorageItemKey = 'local:__fluento_sync_meta';
 
 export async function getSyncMeta(): Promise<SyncMeta> {
     const m = await storage.getItem<Partial<SyncMeta>>(META_KEY);

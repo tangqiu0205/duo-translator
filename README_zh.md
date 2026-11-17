@@ -1,10 +1,10 @@
 [README](README.md) | [中文文档](README_zh.md)
 <h1 align="center">
-  <img align="top" width="44" src="https://raw.githubusercontent.com/linuxscreen/duo-translator/HEAD/public/DuoTranslator.svg" alt="DUO Logo">
-  <span>Duo Translator</span>
+  <img align="top" width="44" src="./public/Fluento.svg" alt="Fluento Logo">
+  <span>Fluento</span>
 </h1>
 
-AI驱动的翻译和写作助手。支持网页翻译、划词翻译、写作增强等。
+AI驱动的翻译和写作助手。支持网页翻译、划词翻译、写作增强等。基于 [Duo Translator](https://github.com/linuxscreen/duo-translator) 开发。
 
 ## 特性
 - 翻译
@@ -51,7 +51,9 @@ AI驱动的翻译和写作助手。支持网页翻译、划词翻译、写作增
   - 扩展弹窗（UI 自定义）
 
 ## 安装
-添加到您的浏览器：
+运行 `pnpm build`，将 `.output/chrome-mv3` 作为解压后的扩展加载。Safari App 构建需要 macOS 和 Xcode。
+
+以下商店链接指向上游 **Duo Translator**，并非已发布的 Fluento 版本：
 
 <p>
   <a href="https://chromewebstore.google.com/detail/duotranslator/pjniaipnjcdiiglednmhgmjmpmllelke"><img src="./docs/assets/badge-chrome.svg" alt="Chrome Web Store"></a>
@@ -64,7 +66,13 @@ AI驱动的翻译和写作助手。支持网页翻译、划词翻译、写作增
 
 Safari 用户请从 Mac App Store 安装 **Duo Translator for Safari**（要求 **macOS 上的 Safari 18.4 或更高版本**）。安装后打开 **Safari → 设置 → 扩展**，勾选启用，并把网站访问权限设为「在所有网站上允许」—— 扩展是在页面上原地改写内容，需要访问您浏览的网站。快捷键从 Safari 26 起才能修改，入口在 Safari → 设置 → 扩展。
 
-## 社区
+## 隐私
+
+- 翻译原文发送给所选翻译或 AI 服务；免费自动池失败后可能切换到其他已勾选服务。
+- 豆包使用浏览器中的豆包登录态。服务密钥与设置保存在浏览器中；备份或同步包含密钥需要主动勾选。
+- 可选的 Google Drive 或 WebDAV 同步将配置保存到您指定的服务。Fluento 不导入上游项目的本地数据或备份。
+
+## 上游社区
 
 - [Discord](https://discord.gg/VSjWP752JV)
 - [Telegram 中文](https://t.me/+v7Z9ssqrQLc3OGI5)

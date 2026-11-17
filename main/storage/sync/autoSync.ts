@@ -14,8 +14,8 @@ import { getConfigItem } from '@/main/storage/configStore';
 import { isSnapshotKey } from '@/main/storage/snapshot';
 import { syncAll } from './syncManager';
 
-const ALARM_PERIODIC = 'duo-sync-periodic';
-const ALARM_DEBOUNCE = 'duo-sync-debounce';
+const ALARM_PERIODIC = 'fluento-sync-periodic';
+const ALARM_DEBOUNCE = 'fluento-sync-debounce';
 // 30s. Chrome clamps sub-minute alarms in release builds; if so the debounce
 // stretches toward ~1min, which is acceptable.
 const DEBOUNCE_MINUTES = 0.5;
@@ -36,7 +36,7 @@ function onStorageChanged(
     if (areaName !== 'local') return;
     // Ignore internal keys + our own sync-meta writes; only real synced data
     // changes should arm the debounce (this also stops the apply→watch loop:
-    // applyMergedToLocal writes __sync_meta, which isSnapshotKey rejects).
+    // applyMergedToLocal writes __fluento_sync_meta, which isSnapshotKey rejects).
     if (!Object.keys(changes).some(isSnapshotKey)) return;
     console.debug(APP_NAME_WITH_SUFFIX, 'storage change watched', changes, areaName);
     void (async () => {

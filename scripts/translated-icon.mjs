@@ -24,7 +24,7 @@ const BADGE_CY = 864;
 const CHECK_SCALE = 8;       // lucide 24-unit grid → viewBox units
 const CHECK_STROKE = 6.2;     // in lucide units (float ball uses 3 at 14px; thicker here for 16px)
 
-const logo = readFileSync(resolve(root, 'public/DuoTranslator.svg'), 'utf8')
+const logo = readFileSync(resolve(root, 'public/Fluento.svg'), 'utf8')
   .replace(/^<svg[^>]*>/, '')
   .replace(/<\/svg>\s*$/, '');
 

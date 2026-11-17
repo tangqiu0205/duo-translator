@@ -19,11 +19,11 @@ import type { Snapshot } from '@/main/storage/snapshot';
 import { isValidSnapshot } from '@/main/storage/snapshot';
 import type { SyncProvider, RemoteBackupInfo } from './types';
 
-const CREDS_KEY: StorageItemKey = 'local:__sync_webdav_creds';
+const CREDS_KEY: StorageItemKey = 'local:__fluento_sync_webdav_creds';
 // Disconnect keeps the credentials (so the config form stays pre-filled and
 // reconnecting is one click) but flips this flag so the provider counts as
 // not-authenticated and stops syncing. Cleared on (re)authenticate.
-const DISCONNECTED_KEY: StorageItemKey = 'local:__sync_webdav_disconnected';
+const DISCONNECTED_KEY: StorageItemKey = 'local:__fluento_sync_webdav_disconnected';
 const REMOTE_FILE_NAME = `${APP_NAME_KEBAB_CASE}-config.json`;
 
 export type WebDavCredentials = {

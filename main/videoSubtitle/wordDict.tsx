@@ -35,7 +35,7 @@ import { ERROR_SCOPE, reportRequestError } from "@/main/errorReport";
  * survives fullscreen the same way the subtitle box and the quick menu do.
  */
 
-const HOST_ID = "duo-yt-word-dict-host";
+const HOST_ID = "fluento-yt-word-dict-host";
 /** Preferred panel width; shrunk on narrow players. */
 const PANEL_WIDTH = 360;
 /** Clearance kept from the player's left/right/top edges. */
@@ -109,12 +109,12 @@ export class WordDictPanel {
         document.getElementById(HOST_ID)?.remove();
         this.host = document.createElement("div");
         this.host.id = HOST_ID;
-        this.host.setAttribute("data-duo-ai-ui", "");
+        this.host.setAttribute("data-fluento-ai-ui", "");
         deps.player.appendChild(this.host);
         const shadow = attachOwnShadow(this.host);
         loadTailwindIntoShadow(shadow);
         const mount = document.createElement("div");
-        mount.className = "duo-ai-root";
+        mount.className = "fluento-ai-root";
         shadow.appendChild(mount);
         this.stopTheme = bindThemeToElement(mount);
         // The panel is a reading surface: selecting inside it must raise the

@@ -383,7 +383,7 @@ export function ShortcutsPage({ onOpenCustomization }: Props) {
             <p className="mt-1 text-[12px] text-ink-soft">
               {t(
                 'modifyShortcutsInSafariSettings',
-                'Safari 26 and later: Safari > Settings > Extensions > DuoTranslator.',
+                'Safari 26 and later: Safari > Settings > Extensions > Fluento for Safari.',
               )}
             </p>
           ) : (

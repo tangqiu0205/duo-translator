@@ -63,7 +63,7 @@ const TRANSLATE_BATCH = 12;
 /** Keep a cue on screen across a short gap to the next one (anti-flicker). */
 const LINGER_MS = 500;
 
-const CAPTION_HIDE_STYLE_ID = "duo-yt-native-caption-hide";
+const CAPTION_HIDE_STYLE_ID = "fluento-yt-native-caption-hide";
 
 /**
  * Caption-load state for one video.
@@ -179,7 +179,7 @@ const TRACK_RECHECK_MS = 2000;
  * survives YouTube's SPA navigations for free, which a variable in the
  * controller would not once the page re-creates it.
  */
-const PINNED_SOURCE_LANG_KEY = "duo-video-subtitle-source-lang";
+const PINNED_SOURCE_LANG_KEY = "fluento-video-subtitle-source-lang";
 
 /** Both wrapped: session storage throws outright in some privacy modes. */
 function readPinnedSourceLang(): string {
@@ -320,7 +320,7 @@ export function initVideoSubtitle(): VideoSubtitleController {
     const ensureSurfaces = async () => {
         const p = document.getElementById("movie_player");
         if (!(p instanceof HTMLElement)) return;
-        if (player !== p || !overlay || !document.getElementById("duo-video-subtitle-box")) {
+        if (player !== p || !overlay || !document.getElementById("fluento-video-subtitle-box")) {
             // Read everything the surfaces need BEFORE creating them: an await
             // between `player = p` and the mount would let the next tick see a
             // half-built state and mount a second copy.
@@ -499,7 +499,7 @@ export function initVideoSubtitle(): VideoSubtitleController {
         s.loadState = exhausted ? "gaveup" : "pending";
         s.nextRetryAt = Date.now() + LOAD_RETRY_MS;
         if (exhausted) {
-            console.warn(APP_NAME_WITH_SUFFIX, "duo video subtitle: giving up on captions —", reason);
+            console.warn(APP_NAME_WITH_SUFFIX, "Fluento video subtitle: giving up on captions —", reason);
             // A queued download would otherwise wait forever on a track that is
             // never coming.
             if (pendingDownloadKind) {

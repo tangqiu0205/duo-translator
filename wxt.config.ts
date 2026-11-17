@@ -42,6 +42,10 @@ export default defineConfig({
             // Public translators: fixed endpoints, no cookie-reading permission.
             'https://index-translate.bilibili.com/*',
             'https://www.doubao.com/*',
+            'https://transmart.qq.com/*',
+            'https://translate.volcengine.com/*',
+            'https://webapi.laratranslate.com/*',
+            'https://webapi.modernmt.com/*',
             // 'https://api-free.deepl.com/*',
             //
             // Google Drive sync: the Drive REST API + the userinfo endpoint,
@@ -126,8 +130,8 @@ export default defineConfig({
                 // server, the e2e build (`--mode development`) and the Safari
                 // debug build all fall to the -dev ID.
                 id: mode === 'production'
-                    ? 'duo-translator@duotranslator.com'
-                    : 'duo-translator-dev@duotranslator.com',
+                    ? 'fluento@fluento.app'
+                    : 'fluento-dev@fluento.app',
                 data_collection_permissions: {
                     required: ['websiteContent'],
                 },
@@ -188,7 +192,7 @@ export default defineConfig({
         ],
         define: {
             // 'import.meta.env.VITE_ENV': JSON.stringify(process.env.VITE_ENV)
-            // pouchdb and other Node-style deps reference `global`; vite 8 no longer
+            // Node-style dependencies may reference `global`; vite 8 no longer
             // polyfills this implicitly, so map it to globalThis for SW/browser runtime.
             global: 'globalThis',
         },
@@ -277,10 +281,10 @@ export default defineConfig({
             manifest.permissions = manifest.permissions?.filter((p) => p !== 'identity');
             // The name Safari shows in Settings › Extensions and the toolbar
             // tooltip. Must match the container app's display name
-            // (safari/DuoTranslator.xcodeproj) so the store listing, the app
+            // (safari/Fluento.xcodeproj) so the store listing, the app
             // and the extension all read the same. A product name, so not
             // localized — unlike the Chrome/Firefox `__MSG_extName__`.
-            manifest.name = 'Duo Translator for Safari';
+            manifest.name = 'Fluento for Safari';
             // The gecko block is Firefox-only noise here. `safari` pins the
             // floor below which `content_scripts.world` (YouTube bridge) and
             // Selection.getComposedRanges are missing — the app's deployment

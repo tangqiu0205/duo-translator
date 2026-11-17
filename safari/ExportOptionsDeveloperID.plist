@@ -7,8 +7,6 @@
 	     notarized, stapled and wrapped in a .dmg by scripts/safari.mjs. -->
 	<key>method</key>
 	<string>developer-id</string>
-	<key>teamID</key>
-	<string>4R5A8D8B77</string>
 	<key>signingStyle</key>
 	<string>automatic</string>
 </dict>

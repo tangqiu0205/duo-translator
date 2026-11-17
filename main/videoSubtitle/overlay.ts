@@ -47,7 +47,7 @@ export interface OverlayCallbacks {
     reservedBottomPx?(): number;
 }
 
-const BOX_ID = "duo-video-subtitle-box";
+const BOX_ID = "fluento-video-subtitle-box";
 /**
  * Absolute floor, used only when the controller reports no reserved band. The
  * real floor is measured from the player's control bar — see
@@ -82,7 +82,7 @@ const WORD_SCAN_RE = /\p{Script=Latin}[\p{Script=Latin}\p{M}'’-]*/gu;
 /** Joiners a match may end on ("well-" before a line break) — not part of the word. */
 const TRAILING_JOINERS_RE = /[-'’]+$/u;
 /** Marks a hoverable word; its value is the word to look up. */
-const WORD_ATTR = "data-duo-word";
+const WORD_ATTR = "data-fluento-word";
 
 /**
  * How long the pointer must rest on a word before it counts as a hover.

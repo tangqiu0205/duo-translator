@@ -30,7 +30,7 @@ import type { DictEntry, DictProvider } from "@/main/dict/types";
 // the previous result, mirroring the workbench / floating-dot pattern.
 // ---------------------------------------------------------------------------
 
-const HOST_ID = "duo-selection-translate-host";
+const HOST_ID = "fluento-selection-translate-host";
 let popupHost: HTMLElement | null = null;
 let popupRoot: Root | null = null;
 let openSignal: ((seed: SelectionSeed) => void) | null = null;
@@ -166,7 +166,7 @@ function ensureMounted(): void {
     if (!host) {
         host = document.createElement("div");
         host.id = HOST_ID;
-        host.setAttribute("data-duo-ai-ui", "");
+        host.setAttribute("data-fluento-ai-ui", "");
         document.documentElement.appendChild(host);
     }
     popupHost = host;
@@ -175,7 +175,7 @@ function ensureMounted(): void {
     const shadow = attachOwnShadow(host);
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     // Page-lifetime singleton — the watcher lives as long as the popup host.
     bindThemeToElement(mount);

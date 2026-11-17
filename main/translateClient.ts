@@ -6,6 +6,7 @@ import { getConfig } from "@/utils/db";
 import { defineUnlistedScript } from "wxt/utils/define-unlisted-script";
 import { isTraditionalChinese } from "@/utils/language";
 import { isPublicTranslationService } from "@/main/publicTranslationConfig";
+import { FREE_TRANSLATION_SERVICE } from "@/main/freeTranslationConfig";
 import { contentInvisible, decodeHtmlText } from "@/utils/dom";
 import type { TranslationUnit, UnitContainer, UnitRange } from "@/main/dom/segments";
 import { unitRangeOf } from "@/main/dom/unitHit";
@@ -23,6 +24,8 @@ export type { UnitContainer, UnitRange } from "@/main/dom/segments";
 export class TranslateResult {
     translatedMappedHtmlText: string; // translated innerHtml of the mapped tag element, for example <b0>translated text</b0>, or <a i=0>translated text</a>(google translate)
     sourceLang: string;
+    /** Concrete route selected by the free-service pool, including cache hits. */
+    actualService?: string;
     score: number;
     rawText: string = "";
     rawTextLength: number = 0; // original text length, sum of all text nodes length
@@ -679,7 +682,7 @@ export async function restore(results: TranslateResult[]): Promise<void> {
 
 /** Escape plain input before handing it to a mapped-HTML adapter. */
 export function preparePlainTranslationTexts(service: string, texts: string[]): string[] {
-    if (service !== TRANSLATE_SERVICE.BAIDU && !isPublicTranslationService(service)) return texts;
+    if (service !== FREE_TRANSLATION_SERVICE && service !== TRANSLATE_SERVICE.BAIDU && !isPublicTranslationService(service)) return texts;
     return texts.map((text) => text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -688,7 +691,7 @@ export function preparePlainTranslationTexts(service: string, texts: string[]): 
 
 /** Mapped-HTML services return escaped output; input boxes/captions need text. */
 export function readPlainTranslationText(service: string, text: string): string {
-    return service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service) ? decodeHtmlText(text) : text;
+    return service === FREE_TRANSLATION_SERVICE || service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service) ? decodeHtmlText(text) : text;
 }
 
 /**
@@ -713,7 +716,7 @@ export async function translateTexts(
         abortAction: ACTION.TRANSLATE_TEXTS_ABORT,
         data: { service, texts, targetLang, ...(sourceLang ? { sourceLang } : {}), ...(scene ? { scene } : {}) },
         signal,
-        cancelOnTimeout: service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service),
+        cancelOnTimeout: service === FREE_TRANSLATION_SERVICE || service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service),
         // Anything that waits on a MODEL gets the long budget; plain machine
         // translators get the shorter one. Built-in AI counts even though it
         // issues no network request: running on-device makes it slower than a
@@ -721,8 +724,9 @@ export async function translateTexts(
         // (there is no batch API), so a paragraph batch is N sequential-ish
         // inferences, and the first call for a language pair also has to load
         // the model into memory.
-        // Baidu may queue behind other tabs to respect the configured QPS.
-        timeout: service.startsWith(AI_PREFIX) || service === TRANSLATE_SERVICE.BUILTIN || service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service)
+        // Baidu and the free pool may queue behind other tabs; the pool also
+        // needs time for its bounded sequential fallback attempts.
+        timeout: service === FREE_TRANSLATION_SERVICE || service.startsWith(AI_PREFIX) || service === TRANSLATE_SERVICE.BUILTIN || service === TRANSLATE_SERVICE.BAIDU || isPublicTranslationService(service)
             ? AI_REQUEST_TIMEOUT
             : API_REQUEST_TIMEOUT,
     });

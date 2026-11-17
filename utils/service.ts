@@ -26,17 +26,18 @@ export interface ServiceOption {
 /**
  * Resolve which service should be selected, given the persisted config value
  * and the currently-available translators / AI providers. Falls back to the
- * first enabled translator when the saved value is missing or no longer valid
- * (e.g. its AI provider was deleted, or the translator was disabled).
+ * first enabled concrete translator when the saved value is missing or no
+ * longer valid. Pinning the free pool in the UI must not silently opt users
+ * into multi-provider routing.
  */
 export function resolveActiveService(
     configValue: string | undefined,
     enabledTranslateServices: TranslateServiceMeta[],
     enabledAiProviders: AiProvider[],
 ): string {
-    const firstEnabled = enabledTranslateServices.length > 0
-        ? enabledTranslateServices[0].value
-        : TRANSLATE_SERVICE.MICROSOFT;
+    const firstEnabled = enabledTranslateServices.find((service) => service.value !== TRANSLATE_SERVICE.FREE_AUTO)?.value
+        ?? enabledTranslateServices[0]?.value
+        ?? TRANSLATE_SERVICE.MICROSOFT;
     if (!configValue) return firstEnabled;
     if (configValue.startsWith(AI_PREFIX)) {
         const id = configValue.slice(AI_PREFIX.length);

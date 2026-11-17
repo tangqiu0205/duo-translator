@@ -1,6 +1,6 @@
 //
-//  DuoTranslatorApp.swift
-//  DuoTranslator
+//  FluentoApp.swift
+//  Fluento
 //
 //  The macOS container app for the Safari web extension. It exists because
 //  Safari only loads web extensions that ship inside a signed app; the app
@@ -12,12 +12,12 @@ import AppKit
 import SwiftUI
 
 @main
-struct DuoTranslatorApp: App {
+struct FluentoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var extensionState = ExtensionState()
 
     var body: some Scene {
-        Window("Duo Translator for Safari", id: "main") {
+        Window("Fluento for Safari", id: "main") {
             ContentView()
                 .environment(extensionState)
         }

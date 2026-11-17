@@ -53,7 +53,7 @@ import { getElementText } from "@/utils/dom";
 import { ERROR_SCOPE, reportRequestError } from "@/main/errorReport";
 import { shareConfig } from "../content";
 
-const HOST_ID = "duo-ai-dot-host";
+const HOST_ID = "fluento-ai-dot-host";
 
 // ---------------------------------------------------------------------------
 // Mount entry point — called once from main/content.ts
@@ -88,13 +88,13 @@ export async function mountAiWritingDot(opts: MountOptions): Promise<() => void>
 
     const host = document.createElement("div");
     host.id = HOST_ID;
-    host.setAttribute("data-duo-ai-ui", "");
+    host.setAttribute("data-fluento-ai-ui", "");
     document.documentElement.appendChild(host);
     const stopKeepAlive = keepHostMounted(host);
     const shadow = attachOwnShadow(host);
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     const stopThemeWatch = bindThemeToElement(mount);
     const root = createRoot(mount);
@@ -621,7 +621,7 @@ function FloatingDotApp({ domain, taskMode }: { domain: string, taskMode: AI_TAS
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
             onMouseDown={onPanelMouseDown}
-            data-duo-ai-ui=""
+            data-fluento-ai-ui=""
         >
             <div className="relative inline-flex flex-col items-end pointer-events-auto">
                 {result && (
@@ -1141,7 +1141,7 @@ function ResultBubble({
                         onClick={onApply}
                         onMouseDown={(e) => e.preventDefault()}
                         disabled={!result.output || result.running}
-                        className="duo-ai-primary h-6 px-2.5 rounded-md text-[11px]"
+                        className="fluento-ai-primary h-6 px-2.5 rounded-md text-[11px]"
                     >{t("aiApply", "Apply")}</button>
                 </div>
             )}

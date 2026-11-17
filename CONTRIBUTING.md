@@ -1,10 +1,10 @@
-# Contributing to Duo Translator
+# Contributing to Fluento
 
 Thank you for your interest in contributing! All kinds of contributions are welcome — bug reports, feature requests, translations, documentation, and code.
 
 ## Reporting Bugs
 
-Before opening an issue, please search [existing issues](https://github.com/linuxscreen/duo-translator/issues) to avoid duplicates.
+Before opening an issue, please search [existing issues](https://github.com/tangqiu0205/duo-translator/issues) to avoid duplicates.
 
 When reporting a bug, include:
 
@@ -69,7 +69,7 @@ Deliberately a short list. Each entry is here because breaking it once produced 
 
 ## Settings and storage
 
-Config lives in `chrome.storage.local` under three key prefixes (`config_`, `rule_`, `domain_`), managed by the repositories in [main/storage/configStore.ts](main/storage/configStore.ts).
+Config lives in `chrome.storage.local` under three key prefixes (`fluento_config_`, `fluento_rule_`, `fluento_domain_`), managed by the repositories in [main/storage/configStore.ts](main/storage/configStore.ts).
 
 - Add a new setting to `CONFIG_KEY` and its default to `DEFAULT_VALUE` in [main/constants.ts](main/constants.ts). Readers resolve defaults from there, so a default is defined once.
 - **Write through `setConfig`**, not `storage.setItem`. Cloud sync keeps a per-key clock that is updated on write; skipping it means the value can be quietly reverted by the next sync.

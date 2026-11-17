@@ -4,6 +4,7 @@ import { ChevronRight, Download, Settings2, X, XCircle } from "lucide-react";
 import { browser } from "wxt/browser";
 import {
     ACTION,
+    APP_NAME,
     browserTargetLanguage,
     CONFIG_KEY,
     LANGUAGES,
@@ -17,12 +18,12 @@ import { loadTailwindIntoShadow } from "@/main/aiWriting/shadowStyle";
 import { attachOwnShadow } from "@/main/dom/shadowRoots";
 import { bindThemeToElement } from "@/utils/theme";
 import { t, useLang } from "@/main/aiWriting/i18n";
-import { DUO_LOGO_SVG } from "@/main/floatBall/logo";
+import { FLUENTO_LOGO_SVG } from "@/main/floatBall/logo";
 import type { SourceTrackOption } from "./types";
 import type { SubtitleDownloadKind, SubtitleDownloadState } from "./download";
 
 /**
- * Player quick controls for video bilingual subtitles: a DuoTranslator button
+ * Player quick controls for video bilingual subtitles: a Fluento button
  * injected into the YouTube control bar (`.ytp-right-controls`) plus a Shadow
  * DOM React menu anchored above it. The menu edits config directly (mode /
  * service via `useConfig` + `setConfig`, the reactive-store pattern) while
@@ -88,8 +89,8 @@ export interface SubtitleControlsController {
     destroy(): void;
 }
 
-const BUTTON_ID = "duo-yt-subtitle-button";
-const MENU_HOST_ID = "duo-yt-subtitle-menu-host";
+const BUTTON_ID = "fluento-yt-subtitle-button";
+const MENU_HOST_ID = "fluento-yt-subtitle-menu-host";
 
 /**
  * The logo, prepared to sit inside a native `.ytp-button` (48x40, `padding:0`,
@@ -106,7 +107,7 @@ const MENU_HOST_ID = "duo-yt-subtitle-menu-host";
  * way YouTube's own icons are centered inside their viewBox.
  */
 function logoButtonSvg(): string {
-    return DUO_LOGO_SVG.replace(/^<svg[^>]*>/, (openTag) =>
+    return FLUENTO_LOGO_SVG.replace(/^<svg[^>]*>/, (openTag) =>
         openTag
             .replace(/\swidth="[^"]*"/, "")
             .replace(/\sheight="[^"]*"/, "")
@@ -136,7 +137,7 @@ export function mountSubtitleControls(deps: SubtitleControlsDeps): SubtitleContr
         button = document.createElement("button");
         button.id = BUTTON_ID;
         button.className = "ytp-button";
-        button.title = "DuoTranslator";
+        button.title = APP_NAME;
         // `.ytp-button` is a 48x48 box whose glyph is expected to fill it; the
         // logo is centered with an absolutely-positioned flex layer so it lines
         // up with the native icons on both axes regardless of button padding.
@@ -155,12 +156,12 @@ export function mountSubtitleControls(deps: SubtitleControlsDeps): SubtitleContr
     document.getElementById(MENU_HOST_ID)?.remove();
     const host = document.createElement("div");
     host.id = MENU_HOST_ID;
-    host.setAttribute("data-duo-ai-ui", "");
+    host.setAttribute("data-fluento-ai-ui", "");
     player.appendChild(host);
     const shadow = attachOwnShadow(host);
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     const stopThemeWatch = bindThemeToElement(mount);
     const root: Root = createRoot(mount);

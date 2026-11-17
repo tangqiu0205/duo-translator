@@ -24,7 +24,7 @@ import { bindThemeToElement } from "@/utils/theme";
 import { t, useLang } from "@/main/aiWriting/i18n";
 import type { IndicatorFailure } from "./types";
 
-const HOST_ID = "duo-translate-error-popover-host";
+const HOST_ID = "fluento-translate-error-popover-host";
 
 /** Gap between the anchor and the panel, and the minimum viewport margin. */
 const GAP = 6;
@@ -203,13 +203,13 @@ function ensureMounted(): void {
     if (!host) {
         host = document.createElement("div");
         host.id = HOST_ID;
-        host.setAttribute("data-duo-ai-ui", "");
+        host.setAttribute("data-fluento-ai-ui", "");
         document.documentElement.appendChild(host);
     }
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     // Claim the root BEFORE anything that can throw (see main/errorToast).
     popoverRoot = createRoot(mount);

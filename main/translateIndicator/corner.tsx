@@ -17,7 +17,7 @@ import { bindThemeToElement } from "@/utils/theme";
 import { t, useLang } from "@/main/aiWriting/i18n";
 import type { CornerIndicatorState } from "./types";
 
-const HOST_ID = "duo-translate-indicator-host";
+const HOST_ID = "fluento-translate-indicator-host";
 
 const EMPTY: CornerIndicatorState = { pending: 0, failed: 0, failure: null };
 
@@ -127,7 +127,7 @@ function ensureMounted(): void {
     if (!host) {
         host = document.createElement("div");
         host.id = HOST_ID;
-        host.setAttribute("data-duo-ai-ui", "");
+        host.setAttribute("data-fluento-ai-ui", "");
         // <html> rather than <body>: an SPA that swaps the body would take the
         // host with it mid-translation.
         document.documentElement.appendChild(host);
@@ -135,7 +135,7 @@ function ensureMounted(): void {
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     // Claim the root BEFORE anything that can throw, so a failure cannot leave a
     // half-built mount to be retried into a second React root (see the note in

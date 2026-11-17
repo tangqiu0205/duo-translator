@@ -9,11 +9,11 @@ import { test, expect } from '../fixtures/extension';
 test.describe('@real live translation smoke', () => {
     test('translates a live English page', async ({ page, seedConfig }) => {
         // Microsoft path works offline-of-API-key (free edge token).
-        await seedConfig({ config_translateService: 'microsoft' });
+        await seedConfig({ fluento_config_translateService: 'microsoft' });
 
         await page.goto('https://en.wikipedia.org/wiki/Cat', { waitUntil: 'domcontentloaded' });
 
-        const translations = page.locator('.duo-translation');
+        const translations = page.locator('.fluento-translation');
         await expect(translations.first()).toBeVisible({ timeout: 30_000 });
         expect(await translations.count()).toBeGreaterThan(0);
         await expect(translations.first()).not.toBeEmpty();

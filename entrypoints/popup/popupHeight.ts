@@ -24,7 +24,7 @@
 // Same trick, same reason as the resolved-theme mirror in utils/theme.ts.
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = 'duoPopupHeight';
+const STORAGE_KEY = 'fluentoPopupHeight';
 
 /** Used until a real height has been recorded once (fresh install / cleared storage). */
 const FALLBACK_HEIGHT = 480;

@@ -1,5 +1,5 @@
-// In-memory paragraph marks — replaces the old `duo-paragraph` /
-// `duo-needs-translate` classes on page elements.
+// In-memory paragraph marks — replaces the old `fluento-paragraph` /
+// `fluento-needs-translate` classes on page elements.
 //
 // Keeping the marks in content-script memory instead of the DOM means:
 //   - a page rewriting className (React re-render, SPA router) can neither
@@ -143,7 +143,7 @@ export function clearParagraphMarks(): void {
 }
 
 // ---------------------------------------------------------------------------
-// No-translate marks — replaces the old `duo-no-translate` class.
+// No-translate marks — replaces the old `fluento-no-translate` class.
 //
 // A per-element "this is a no-translate region root" flag with two writers:
 // the marking scan caching a positive user-rule match (`el.matches(rules)`),

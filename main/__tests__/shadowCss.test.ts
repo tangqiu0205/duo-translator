@@ -23,7 +23,7 @@ import {
     unstyleShadowRoot,
 } from "@/main/dom/shadowCss";
 
-const CSS = ".duo-translation{color:red}";
+const CSS = ".fluento-translation{color:red}";
 
 function makeRoot(connected = true): ShadowRoot {
     const host = document.createElement("div");
@@ -32,7 +32,7 @@ function makeRoot(connected = true): ShadowRoot {
 }
 
 function carrier(root: ShadowRoot): HTMLStyleElement | null {
-    return root.querySelector("style[data-duo-shadow-css]");
+    return root.querySelector("style[data-fluento-shadow-css]");
 }
 
 describe("shadowCss batching", () => {
@@ -80,17 +80,17 @@ describe("shadowCss batching", () => {
     it("applies the css in force at flush time, not at queue time", () => {
         const root = makeRoot();
         queueShadowRootStyle(root);
-        setShadowCss("translation", ".duo-translation{color:blue}");
+        setShadowCss("translation", ".fluento-translation{color:blue}");
         flushShadowRootStyles();
-        expect(carrier(root)?.textContent).toBe(".duo-translation{color:blue}");
+        expect(carrier(root)?.textContent).toBe(".fluento-translation{color:blue}");
     });
 
     it("keeps updating a root through setShadowCss once flushed", () => {
         const root = makeRoot();
         queueShadowRootStyle(root);
         flushShadowRootStyles();
-        setShadowCss("translation", ".duo-translation{color:green}");
-        expect(carrier(root)?.textContent).toBe(".duo-translation{color:green}");
+        setShadowCss("translation", ".fluento-translation{color:green}");
+        expect(carrier(root)?.textContent).toBe(".fluento-translation{color:green}");
     });
 
     it("re-queuing an already styled root is a no-op", () => {

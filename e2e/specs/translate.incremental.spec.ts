@@ -6,7 +6,7 @@ import { mockTranslateProviders, ZH, type TranslateRecorder } from '../mocks/tra
  * Acceptance specs for incremental re-translation.
  *
  * These assert on the PROVIDER REQUEST PAYLOADS, not on the rendered result.
- * Counting `.duo-translation` nodes cannot distinguish "we never re-sent this
+ * Counting `.fluento-translation` nodes cannot distinguish "we never re-sent this
  * paragraph" from "we re-sent it and the answer happened to look the same" —
  * the same-language drop (content.ts) and the echo guard (translateClient.ts)
  * both swallow a redundant round trip silently. The payload is the only place
@@ -45,8 +45,8 @@ test.describe('@incremental incremental re-translation (mocked providers)', () =
 
     test('double: an unrelated mutation does not re-send already-translated paragraphs', async ({ page }) => {
         await page.goto('/incremental.html');
-        await expect(page.locator('#plain .duo-translation')).toContainText(ZH);
-        await expect(page.locator('#plain2 .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#plain .fluento-translation')).toContainText(ZH);
+        await expect(page.locator('#plain2 .fluento-translation')).toContainText(ZH);
 
         provider.reset();
         await appendParagraphAndWait(page);
@@ -60,7 +60,7 @@ test.describe('@incremental incremental re-translation (mocked providers)', () =
     });
 
     test('single: an unrelated mutation does not re-send already-translated paragraphs', async ({ page, seedConfig }) => {
-        await seedConfig({ config_viewStrategy: 'single', config_translateService: 'microsoft' });
+        await seedConfig({ fluento_config_viewStrategy: 'single', fluento_config_translateService: 'microsoft' });
         await page.goto('/incremental.html');
         await expect(page.locator('#plain')).toContainText(ZH);
         await expect(page.locator('#plain2')).toContainText(ZH);
@@ -88,14 +88,14 @@ test.describe('@incremental incremental re-translation (mocked providers)', () =
 
     test('a button appended to a translated paragraph is translated on its own, leaving the paragraph untouched', async ({ page }) => {
         await page.goto('/incremental.html');
-        await expect(page.locator('#plain > .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#plain > .fluento-translation')).toContainText(ZH);
 
         // Stamp the existing translation node so we can prove it is the SAME
         // node afterwards — a whole-paragraph re-translation would replace it.
         await page.evaluate(() => {
-            document.querySelector('#plain > .duo-translation')!.setAttribute('data-e2e-stamp', 'v1');
+            document.querySelector('#plain > .fluento-translation')!.setAttribute('data-e2e-stamp', 'v1');
         });
-        const before = await page.locator('#plain > .duo-translation').textContent();
+        const before = await page.locator('#plain > .fluento-translation').textContent();
 
         await page.evaluate(() => {
             const b = document.createElement('button');
@@ -105,22 +105,22 @@ test.describe('@incremental incremental re-translation (mocked providers)', () =
         });
 
         // The button carries its own label and must get its own translation.
-        await expect(page.locator('#late-btn .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#late-btn .fluento-translation')).toContainText(ZH);
 
         // The sentence's translation is untouched: same node, same text, one of it.
-        await expect(page.locator('#plain > .duo-translation')).toHaveCount(1);
-        await expect(page.locator('#plain > .duo-translation')).toHaveAttribute('data-e2e-stamp', 'v1');
-        expect(await page.locator('#plain > .duo-translation').textContent()).toBe(before);
+        await expect(page.locator('#plain > .fluento-translation')).toHaveCount(1);
+        await expect(page.locator('#plain > .fluento-translation')).toHaveAttribute('data-e2e-stamp', 'v1');
+        expect(await page.locator('#plain > .fluento-translation').textContent()).toBe(before);
     });
 
     test('a button present at load time is its own unit and is never cloned into the sentence translation', async ({ page }) => {
         await page.goto('/incremental.html');
-        await expect(page.locator('#with-button > .duo-translation')).toContainText(ZH);
-        await expect(page.locator('#act .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#with-button > .fluento-translation')).toContainText(ZH);
+        await expect(page.locator('#act .fluento-translation')).toContainText(ZH);
 
         // The sentence translation must not carry a copy of the button. A clone
         // duplicates its id and is inert — clicking it does nothing.
-        await expect(page.locator('#with-button > .duo-translation button')).toHaveCount(0);
+        await expect(page.locator('#with-button > .fluento-translation button')).toHaveCount(0);
         await expect(page.locator('#act')).toHaveCount(1);
     });
 
@@ -138,20 +138,20 @@ test.describe('@incremental incremental re-translation (mocked providers)', () =
 
     test('double: growing a unit re-translates the whole sentence, replacing the old translation', async ({ page }) => {
         await page.goto('/incremental.html');
-        await expect(page.locator('#spans > .duo-translation')).toContainText('brave world');
+        await expect(page.locator('#spans > .fluento-translation')).toContainText('brave world');
 
         // Stamp it: a *replacement* must not leave the superseded node behind.
         await page.evaluate(() => {
-            document.querySelector('#spans > .duo-translation')!.setAttribute('data-e2e-stamp', 'v1');
+            document.querySelector('#spans > .fluento-translation')!.setAttribute('data-e2e-stamp', 'v1');
         });
         provider.reset();
         await growSpanRun(page);
 
-        await expect(page.locator('#spans > .duo-translation')).toContainText('And more text');
+        await expect(page.locator('#spans > .fluento-translation')).toContainText('And more text');
         // Exactly one translation for the unit — not the old one plus a new one.
-        await expect(page.locator('#spans > .duo-translation')).toHaveCount(1);
-        await expect(page.locator('#spans > .duo-translation')).not.toHaveAttribute('data-e2e-stamp', 'v1');
-        await expect(page.locator('#spans > .duo-translation')).toContainText('brave world');
+        await expect(page.locator('#spans > .fluento-translation')).toHaveCount(1);
+        await expect(page.locator('#spans > .fluento-translation')).not.toHaveAttribute('data-e2e-stamp', 'v1');
+        await expect(page.locator('#spans > .fluento-translation')).toContainText('brave world');
 
         // The whole run went out in one request: a translation cannot be
         // composed from an old half plus a newly translated tail.
@@ -160,7 +160,7 @@ test.describe('@incremental incremental re-translation (mocked providers)', () =
     });
 
     test('single: growing a unit re-sends the SOURCE, not the translation already in the page', async ({ page, seedConfig }) => {
-        await seedConfig({ config_viewStrategy: 'single', config_translateService: 'microsoft' });
+        await seedConfig({ fluento_config_viewStrategy: 'single', fluento_config_translateService: 'microsoft' });
         await page.goto('/incremental.html');
         await expect(page.locator('#spans')).toContainText(ZH);
 
@@ -191,8 +191,8 @@ test.describe('@incremental incremental re-translation (mocked providers)', () =
         await page.goto('/incremental.html');
 
         // One unit, one translation — the icon must not split the sentence.
-        await expect(page.locator('#with-icon > .duo-translation')).toHaveCount(1);
-        await expect(page.locator('#with-icon > .duo-translation')).toContainText('Press the');
-        await expect(page.locator('#with-icon > .duo-translation')).toContainText('to continue reading');
+        await expect(page.locator('#with-icon > .fluento-translation')).toHaveCount(1);
+        await expect(page.locator('#with-icon > .fluento-translation')).toContainText('Press the');
+        await expect(page.locator('#with-icon > .fluento-translation')).toContainText('to continue reading');
     });
 });

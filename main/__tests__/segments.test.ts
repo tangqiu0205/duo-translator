@@ -259,11 +259,11 @@ describe("segmentParagraph — run qualification (text anywhere inside the run)"
 
     it("a highlight-wrapped unit stays one translated unit and is not descended into", () => {
         // What the DOM looks like after DOUBLE + sentence wrapping: the original
-        // text nodes are emptied and their content lives in <duo-span>s.
+        // text nodes are emptied and their content lives in <fluento-span>s.
         const div = el(
-            '<div><duo-span duo-sequence="0">Hello world.</duo-span>' +
-            '<span class="duo-divide">&nbsp;</span>' +
-            '<span class="duo-translation">你好世界。</span></div>'
+            '<div><fluento-span fluento-sequence="0">Hello world.</fluento-span>' +
+            '<span class="fluento-divide">&nbsp;</span>' +
+            '<span class="fluento-translation">你好世界。</span></div>'
         );
         div.insertBefore(document.createTextNode(""), div.firstChild);
         const scan = segmentParagraph(div);
@@ -272,14 +272,14 @@ describe("segmentParagraph — run qualification (text anywhere inside the run)"
         expect(scan.descendChildren).toHaveLength(0);
     });
 
-    it("stays one translated unit when the duo-spans sit inside an inline child", () => {
+    it("stays one translated unit when the fluento-spans sit inside an inline child", () => {
         // Wrapping happens at each text node's own parent, so a paragraph like
         // `<div><b>One. Two.</b></div>` ends up with its spans nested in the <b>
         // — the lone-wrapper unwrap must not descend into it either.
         const div = el(
-            '<div><b><duo-span duo-sequence="0">One.</duo-span>' +
-            '<duo-span duo-sequence="1">Two.</duo-span></b>' +
-            '<br class="duo-divide"><span class="duo-translation">一。二。</span></div>'
+            '<div><b><fluento-span fluento-sequence="0">One.</fluento-span>' +
+            '<fluento-span fluento-sequence="1">Two.</fluento-span></b>' +
+            '<br class="fluento-divide"><span class="fluento-translation">一。二。</span></div>'
         );
         const scan = segmentParagraph(div);
         expect(scan.units).toHaveLength(1);
@@ -332,10 +332,10 @@ describe("segmentParagraph — <br> runs", () => {
     });
 });
 
-describe("segmentParagraph — our own duo nodes on rescan", () => {
-    it("a unit followed by .duo-divide + .duo-translation is reported translated, markers excluded", () => {
+describe("segmentParagraph — our own Fluento nodes on rescan", () => {
+    it("a unit followed by .fluento-divide + .fluento-translation is reported translated, markers excluded", () => {
         const div = el(
-            '<div>hello world<br class="duo-divide"><span class="duo-translation">你好世界</span></div>'
+            '<div>hello world<br class="fluento-divide"><span class="fluento-translation">你好世界</span></div>'
         );
         const scan = segmentParagraph(div);
         expect(scan.units).toHaveLength(1);
@@ -347,7 +347,7 @@ describe("segmentParagraph — our own duo nodes on rescan", () => {
 
     it("mixed container: only the translated unit is flagged", () => {
         const div = el(
-            '<div>one<br class="duo-divide"><span class="duo-translation">一</span><br><br>two</div>'
+            '<div>one<br class="fluento-divide"><span class="fluento-translation">一</span><br><br>two</div>'
         );
         const scan = segmentParagraph(div);
         expect(scan.units).toHaveLength(2);
@@ -357,7 +357,7 @@ describe("segmentParagraph — our own duo nodes on rescan", () => {
 
     it("a container whose only unit is translated has nothing left to do", () => {
         const div = el(
-            '<div>one<br class="duo-divide"><span class="duo-translation">一</span></div>'
+            '<div>one<br class="fluento-divide"><span class="fluento-translation">一</span></div>'
         );
         const scan = segmentParagraph(div);
         expect(scan.units).toHaveLength(1);
@@ -366,29 +366,29 @@ describe("segmentParagraph — our own duo nodes on rescan", () => {
 });
 
 describe("segmentParagraph — the translating indicator is invisible", () => {
-    // A <duo-loading> marker is inserted next to the unit it belongs to WHILE
+    // A <fluento-loading> marker is inserted next to the unit it belongs to WHILE
     // that unit is being translated, so a re-scan during the request must land
     // on exactly the same segmentation it would have without one — including
     // the whole-element path, which is what keeps the translation-cache key of
     // a plain paragraph stable.
     it("does not split a run, join a unit or cost the whole-element path", () => {
-        const p = el("<p>Hello <b>world</b><duo-loading></duo-loading></p>");
+        const p = el("<p>Hello <b>world</b><fluento-loading></fluento-loading></p>");
         const scan = segmentParagraph(p);
         expect(scan.units).toHaveLength(1);
         expect(scan.units[0].wholeElement).toBe(true);
-        expect(scan.units[0].nodes.some((n) => (n as HTMLElement).tagName === "DUO-LOADING")).toBe(false);
+        expect(scan.units[0].nodes.some((n) => (n as HTMLElement).tagName === "FLUENTO-LOADING")).toBe(false);
         expect(scan.descendChildren).toHaveLength(0);
     });
 
     it("mid-container marker does not cut the run in two", () => {
-        const div = el("<div>one <duo-loading></duo-loading>two</div>");
+        const div = el("<div>one <fluento-loading></fluento-loading>two</div>");
         const scan = segmentParagraph(div);
         expect(scan.units).toHaveLength(1);
         expect(scan.units[0].nodes).toHaveLength(2);
     });
 
     it("a marker alone is not a unit and is not descended into", () => {
-        const div = el("<div><duo-loading><span>x</span></duo-loading></div>");
+        const div = el("<div><fluento-loading><span>x</span></fluento-loading></div>");
         const scan = segmentParagraph(div);
         expect(scan.units).toHaveLength(0);
         expect(scan.descendChildren).toHaveLength(0);

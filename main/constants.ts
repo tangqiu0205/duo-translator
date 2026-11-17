@@ -21,10 +21,11 @@ export class TranslateServiceMeta {
     }
 }
 
-export const APP_NAME = import.meta.env.VITE_APP_NAME;
+export const APP_NAME = 'Fluento';
+export const APP_LOGO_PATH = '/Fluento.svg';
 export const APP_NAME_WITH_SUFFIX = APP_NAME + ' - ';
-export const APP_NAME_KEBAB_CASE = import.meta.env.VITE_APP_NAME_KEBAB_CASE;
-export const APP_NAME_PASCAL_CASE = import.meta.env.VITE_APP_NAME_PASCAL_CASE;
+export const APP_NAME_KEBAB_CASE = 'fluento';
+export const APP_NAME_PASCAL_CASE = 'Fluento';
 
 export const STATUS_SUCCESS = '200';
 export const STATUS_FAIL = '500';
@@ -95,7 +96,7 @@ export enum DB_ACTION {
 /**
  * Website translation rules (main/siteRules/). A separate enum from DB_ACTION
  * on purpose: `RULE_*` above is the OLD per-host no-translate selector list
- * (`rule_<host>`, ruleMode.ts), which this feature neither replaces nor touches.
+ * (`fluento_rule_<host>`, ruleMode.ts), which this feature neither replaces nor touches.
  * Two namespaces, no shared identifiers.
  */
 export enum SITE_RULE_ACTION {
@@ -196,6 +197,11 @@ export enum TRANSLATE_SERVICE {
     // it preserves the same `<bN>` inline placeholders Microsoft does, so it
     // needs no special handling in the DOM orchestration.
     YANDEX = 'yandex',
+    FREE_AUTO = 'freeAuto',
+    TRANSMART = 'transmart',
+    VOLCENGINE = 'volcengine',
+    LARA = 'lara',
+    MODERN_MT = 'modernMt',
     BILIBILI = 'bilibili',
     DOUBAO = 'doubao',
     DOUBAO_VOLC = 'doubaoVolc',
@@ -220,9 +226,14 @@ export const TTS_SERVICE_OPTIONS: { value: TTS_SERVICE; label: string }[] = [
 ];
 
 export const TRANSLATE_SERVICES: Map<string, TranslateServiceMeta> = new Map([
+    ["freeAuto", new TranslateServiceMeta("freeTranslationTitle", "freeAuto", "freeTranslationTitle", "FreeTranslationDescription", true)],
     ["microsoft", new TranslateServiceMeta("Microsoft", "microsoft", "microsoftTranslator", "MicrosoftTranslateDescription", false)],
     ["google", new TranslateServiceMeta("Google", "google", "googleTranslate", "GoogleTranslateDescription", false)],
     ["yandex", new TranslateServiceMeta("Yandex", "yandex", "yandexTranslate", "YandexTranslateDescription", false)],
+    ["transmart", new TranslateServiceMeta("transmartTranslate", "transmart", "transmartTranslate", "TransmartTranslateDescription", false)],
+    ["volcengine", new TranslateServiceMeta("volcengineTranslate", "volcengine", "volcengineTranslate", "VolcengineTranslateDescription", false, undefined, undefined, "volc")],
+    ["lara", new TranslateServiceMeta("laraTranslate", "lara", "laraTranslate", "LaraTranslateDescription", false)],
+    ["modernMt", new TranslateServiceMeta("modernMtTranslate", "modernMt", "modernMtTranslate", "ModernMtTranslateDescription", false)],
     ["bilibili", new TranslateServiceMeta("bilibiliTranslate", "bilibili", "bilibiliTranslate", "BilibiliTranslateDescription", true)],
     ["doubao", new TranslateServiceMeta("doubaoTranslate", "doubao", "doubaoTranslate", "DoubaoTranslateDescription", false, undefined, undefined, "doubao")],
     ["doubaoVolc", new TranslateServiceMeta("doubaoVolcTranslate", "doubaoVolc", "doubaoVolcTranslate", "DoubaoTranslateDescription", false, undefined, undefined, "volc")],
@@ -470,7 +481,7 @@ export enum CONFIG_KEY {
     FLOAT_BALL_DOCKED_POSITION = 'floatBallDockedPosition',
     FLOAT_BALL_SWITCH = 'floatBallSwitch',
     // Visual/interaction variant for the page floating control.
-    // 'docked' is the compact Duo-logo ball that retracts into the nearest
+    // 'docked' is the compact Fluento-logo ball that retracts into the nearest
     // edge; 'classic' preserves the original orange/green toggle style.
     FLOAT_BALL_STYLE = 'floatBallStyle',
     CONTEXT_MENU_SWITCH = 'contextMenuSwitch',
@@ -517,6 +528,7 @@ export enum CONFIG_KEY {
     BAIDU_SECRET_KEY = 'baiduSecretKey',
     BAIDU_QPS = 'baiduQps',
     BILIBILI_TRANSLATE_MODEL = 'bilibiliTranslateModel',
+    FREE_TRANSLATION = 'freeTranslation',
     // When true, cloud sync includes API keys (AI providers + translation
     // APIs) in the synced snapshot. Off by default so secrets stay on-device
     // unless the user opts in. Separate from the per-export "include keys"
@@ -599,7 +611,7 @@ export enum CONFIG_KEY {
     SITE_RULE_DISABLED_IDS = 'siteRuleDisabledIds',
     // SiteRuleSubscription[] — subscription URLs plus their on/off state and
     // last-fetch metadata. The fetched rule text itself is NOT here (and not
-    // synced): it lives under the `__site_rule_cache` internal key.
+    // synced): it lives under the `__fluento_site_rule_cache` internal key.
     SITE_RULE_SUBSCRIPTIONS = 'siteRuleSubscriptions',
 
     // --- Customization (main/customShortcut/) -------------------------------
@@ -729,7 +741,7 @@ export const TRANSLATING_ANIMATION_OPTIONS: { value: TRANSLATING_ANIMATION, titl
  * isTranslateIndicator in main/dom/predicates.ts) so they stay invisible to
  * segmentation, unit ranges and serialization.
  */
-export const TRANSLATE_INDICATOR_TAG = 'duo-loading'
+export const TRANSLATE_INDICATOR_TAG = 'fluento-loading'
 
 export const DEFAULT_VALUE = {
     GLOBAL_SWITCH: true,

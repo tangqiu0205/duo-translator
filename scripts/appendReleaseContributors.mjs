@@ -36,7 +36,7 @@ async function githubJson(url, token) {
             Accept: 'application/vnd.github+json',
             Authorization: `Bearer ${token}`,
             'X-GitHub-Api-Version': API_VERSION,
-            'User-Agent': 'duo-translator-release-workflow',
+            'User-Agent': 'fluento-release-workflow',
         },
     });
 

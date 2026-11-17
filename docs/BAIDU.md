@@ -1,6 +1,6 @@
 # 百度翻译接入说明
 
-Duo Translator 使用百度翻译开放平台的「通用文本翻译 API」。接口说明见[百度官方文档](https://fanyi-api.baidu.com/doc/21)，账户参数以自己的控制台为准。
+Fluento 使用百度翻译开放平台的「通用文本翻译 API」。接口说明见[百度官方文档](https://fanyi-api.baidu.com/doc/21)，账户参数以自己的控制台为准。
 
 ## 账号与配置
 

@@ -9,7 +9,7 @@ interface Props {
 
 /**
  * Visualises a word-level diff between `original` and `rewritten`.
- * Renders inline <ins>/<del> spans styled by .duo-ai-ins / .duo-ai-del
+ * Renders inline <ins>/<del> spans styled by .fluento-ai-ins / .fluento-ai-del
  * (defined in aiWriting.css and adopted into the same ShadowRoot).
  */
 export function DiffView({ original, rewritten, compact = false }: Props) {
@@ -24,8 +24,8 @@ export function DiffView({ original, rewritten, compact = false }: Props) {
         >
             {parts.map((p, i) => {
                 if (p.kind === "eq") return <span key={i}>{p.text}</span>;
-                if (p.kind === "ins") return <ins key={i} className="duo-ai-ins">{p.text}</ins>;
-                return <del key={i} className="duo-ai-del">{p.text}</del>;
+                if (p.kind === "ins") return <ins key={i} className="fluento-ai-ins">{p.text}</ins>;
+                return <del key={i} className="fluento-ai-del">{p.text}</del>;
             })}
         </div>
     );

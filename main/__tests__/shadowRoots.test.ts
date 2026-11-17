@@ -69,7 +69,7 @@ describe("ownership", () => {
         const host = document.createElement("div");
         document.body.appendChild(host);
         const root = attachOwnShadow(host);
-        root.innerHTML = "<div class='duo-ai-root'><button><span>Translate</span></button></div>";
+        root.innerHTML = "<div class='fluento-ai-root'><button><span>Translate</span></button></div>";
         const span = root.querySelector("span")!;
 
         expect(isInOwnUi(span)).toBe(true);

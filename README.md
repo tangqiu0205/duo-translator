@@ -1,10 +1,10 @@
 [README](README.md) | [中文文档](README_zh.md)
 <h1 align="center">
-  <img align="top" width="44" src="https://raw.githubusercontent.com/linuxscreen/duo-translator/HEAD/public/DuoTranslator.svg" alt="DUO Logo">
-  <span>Duo Translator</span>
+  <img align="top" width="44" src="./public/Fluento.svg" alt="Fluento Logo">
+  <span>Fluento</span>
 </h1>
 
-An AI-powered translation and writing assistant. Supports webpage translation, selected text translation, writing enhancement, and more.
+An AI-powered translation and writing assistant. Supports webpage translation, selected text translation, writing enhancement, and more. Based on [Duo Translator](https://github.com/linuxscreen/duo-translator).
 
 ## Features
 - Translation
@@ -51,7 +51,9 @@ An AI-powered translation and writing assistant. Supports webpage translation, s
   - Extension popup (UI customization)
 
 ## Installation
-Add to your browser:
+Build Fluento with `pnpm build` and load `.output/chrome-mv3` as an unpacked extension. Safari app builds require macOS and Xcode.
+
+The store links below point to the upstream **Duo Translator**, not a published Fluento release:
 
 <p>
   <a href="https://chromewebstore.google.com/detail/duotranslator/pjniaipnjcdiiglednmhgmjmpmllelke"><img src="./docs/assets/badge-chrome.svg" alt="Chrome Web Store"></a>
@@ -64,7 +66,13 @@ Alternatively, you can install it manually using the ZIP file.
 
 Safari users install **Duo Translator for Safari** from the Mac App Store (requires **Safari 18.4 or later on macOS**). After installing, open **Safari → Settings → Extensions**, switch it on, and allow it on every website — the extension rewrites pages in place, so it needs access to the sites you read. Shortcuts can only be edited from Safari 26 onwards, under Safari → Settings → Extensions.
 
-## Community
+## Privacy
+
+- Translation text is sent to the selected translation or AI provider. The automatic free pool may try other explicitly selected participants after a failure.
+- Doubao routes use the browser's Doubao login session. Provider keys and settings are stored in the browser; including keys in backups or sync requires explicit opt-in.
+- Optional Google Drive or WebDAV sync stores configuration with the service you configure. Fluento does not import the upstream project's local data or backups.
+
+## Upstream community
 
 - [Discord](https://discord.gg/VSjWP752JV)
 - [Telegram 中文](https://t.me/+v7Z9ssqrQLc3OGI5)

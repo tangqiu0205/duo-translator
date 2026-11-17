@@ -69,19 +69,19 @@ const REMOTE_FILE_NAME = `${APP_NAME_KEBAB_CASE}-config.json`;
 // extension id (unpacked dev id + store id).
 const GOOGLE_CLIENT_ID_WEB = import.meta.env.VITE_GOOGLE_CLIENT_ID_WEB;
 
-const TOKENS_KEY: StorageItemKey = 'local:__sync_gdrive_tokens';
-const FILE_ID_KEY: StorageItemKey = 'local:__sync_gdrive_file_id';
+const TOKENS_KEY: StorageItemKey = 'local:__fluento_sync_gdrive_tokens';
+const FILE_ID_KEY: StorageItemKey = 'local:__fluento_sync_gdrive_file_id';
 // Device-local fact ("this browser can't mint a token any more"), deliberately
 // outside the sync snapshot: it says nothing about the account, only about this
 // install. Set when renewal fails for a reason the user has to resolve.
-const NEEDS_REAUTH_KEY: StorageItemKey = 'local:__sync_gdrive_needs_reauth';
+const NEEDS_REAUTH_KEY: StorageItemKey = 'local:__fluento_sync_gdrive_needs_reauth';
 // Which credential path the user wants (Options checkbox, Chrome only, default
 // on). Device-local like the two keys above and for the same reason: it answers
 // "how does THIS browser talk to Google", which is meaningless on any other
-// device. Deliberately NOT a CONFIG_KEY — `config_*` keys are in the sync
+// device. Deliberately NOT a CONFIG_KEY — `fluento_config_*` keys are in the sync
 // snapshot, and syncing this one would push a Chrome-only choice onto a
 // Firefox install where it cannot be honoured.
-const USE_BROWSER_AUTH_KEY: StorageItemKey = 'local:__sync_gdrive_use_browser_auth';
+const USE_BROWSER_AUTH_KEY: StorageItemKey = 'local:__fluento_sync_gdrive_use_browser_auth';
 
 /** Which credential path this install connected through. */
 type GdriveMode = 'chrome' | 'web';
@@ -786,7 +786,7 @@ class GoogleDriveProviderImpl implements SyncProvider {
         }
 
         // First upload — multipart so we can set parents = [appDataFolder].
-        const boundary = `duo-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const boundary = `fluento-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const metadata = JSON.stringify({
             name: REMOTE_FILE_NAME,
             parents: ['appDataFolder'],

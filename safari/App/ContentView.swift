@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  DuoTranslator
+//  Fluento
 //
 //  Single status window: icon, name, enabled/disabled, one primary button,
 //  three setup steps, footer links. Deliberately nothing else — every
@@ -12,9 +12,9 @@ import SwiftUI
 
 /// Public links. Keep in sync with VITE_WEBSITE / VITE_GITHUB_URL in .env.
 private enum Links {
-    static let website = URL(string: "https://duotranslator.com")!
-    static let privacy = URL(string: "https://duotranslator.com/privacy")!
-    static let github = URL(string: "https://github.com/linuxscreen/duo-translator")!
+    static let website = URL(string: "https://github.com/tangqiu0205/duo-translator")!
+    static let privacy = URL(string: "https://github.com/tangqiu0205/duo-translator#privacy")!
+    static let github = URL(string: "https://github.com/tangqiu0205/duo-translator")!
 }
 
 struct ContentView: View {
@@ -67,7 +67,7 @@ struct ContentView: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
-            Text("Duo Translator for Safari")
+            Text("Fluento for Safari")
                 .font(.title.weight(.semibold))
             Text("Bilingual web page translation for Safari.")
                 .font(.callout)
@@ -116,7 +116,7 @@ struct ContentView: View {
 
     private var steps: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Step(number: 1, text: "Turn on Duo Translator for Safari under Safari › Settings › Extensions.")
+            Step(number: 1, text: "Turn on Fluento for Safari under Safari › Settings › Extensions.")
             Step(number: 2, text: "Allow it on websites: click its toolbar icon in Safari and choose “Always Allow on Every Website”.")
             Step(number: 3, text: "Translate any page from the toolbar icon, the right-click menu, or ⌥S.")
         }

@@ -52,7 +52,7 @@ export function getAllProviders(): SyncProvider[] {
 // with no WebDAV credentials would be handed "sync to WebDAV", stop syncing, and
 // therefore never receive the correction. "Where does THIS browser sync" is a
 // property of the browser, like the two gdrive keys next door.
-const ACTIVE_PROVIDER_KEY: StorageItemKey = 'local:__sync_active_provider';
+const ACTIVE_PROVIDER_KEY: StorageItemKey = 'local:__fluento_sync_active_provider';
 
 /**
  * The one sync target. Only ever one — two connected remotes are well-defined

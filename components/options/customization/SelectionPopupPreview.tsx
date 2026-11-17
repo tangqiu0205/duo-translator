@@ -64,7 +64,7 @@ export function SelectionPopupPreview() {
     if (!host.shadowRoot?.firstChild) {
       loadTailwindIntoShadow(shadow);
       const m = document.createElement('div');
-      m.className = 'duo-ai-root';
+      m.className = 'fluento-ai-root';
       shadow.appendChild(m);
       setMount(m);
     }

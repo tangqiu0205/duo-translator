@@ -7,7 +7,7 @@ import { attachOwnShadow } from "@/main/dom/shadowRoots";
 import { bindThemeToElement } from "@/utils/theme";
 import { t, useLang } from "./aiWriting/i18n";
 
-const HOST_ID = "duo-rule-hint-host";
+const HOST_ID = "fluento-rule-hint-host";
 
 /**
  * One-time entry hint for "Set no-translate area" (rule mode). Resolves once the
@@ -27,12 +27,12 @@ export async function confirmRuleModeHint(): Promise<void> {
     return new Promise<void>((resolve) => {
         const host = document.createElement("div");
         host.id = HOST_ID;
-        host.setAttribute("data-duo-rule-ui", "");
+        host.setAttribute("data-fluento-rule-ui", "");
         document.documentElement.appendChild(host);
         const shadow = attachOwnShadow(host);
         loadTailwindIntoShadow(shadow);
         const mount = document.createElement("div");
-        mount.className = "duo-ai-root";
+        mount.className = "fluento-ai-root";
         shadow.appendChild(mount);
         const stopThemeWatch = bindThemeToElement(mount);
         const root = createRoot(mount);
@@ -85,7 +85,7 @@ function RuleHintDialog({ onConfirm }: { onConfirm: (dontRemind: boolean) => voi
                     <button
                         type="button"
                         onClick={() => onConfirm(dontRemind)}
-                        className="duo-ai-primary rounded-md px-4 py-1.5 text-[13px]"
+                        className="fluento-ai-primary rounded-md px-4 py-1.5 text-[13px]"
                     >
                         {t("ruleModeHintConfirm", "Got it")}
                     </button>

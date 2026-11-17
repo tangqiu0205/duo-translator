@@ -5,17 +5,17 @@ import { contentValid, contentVisible } from "@/utils/dom";
 import { isEditable, isExcludedNodeType, isFormulaElement } from "@/main/dom/predicates";
 import { pageShadowRootOf } from "@/main/dom/shadowRoots";
 
-/** Strip every `duo-*` class and attribute the extension added to an element. */
-export function removeDuoClassAndAttribute(element: HTMLElement) {
+/** Strip every `fluento-*` class and attribute the extension added to an element. */
+export function removeFluentoClassAndAttribute(element: HTMLElement) {
     const attributes = element.getAttributeNames();
     for (const attribute of attributes) {
-        if (attribute.startsWith("duo-")) {
+        if (attribute.startsWith("fluento-")) {
             element.removeAttribute(attribute);
         }
     }
     const classList: string[] = [];
     element.classList.forEach((className) => {
-        if (className.startsWith("duo-")) {
+        if (className.startsWith("fluento-")) {
             classList.push(className);
         }
     });

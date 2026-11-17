@@ -20,7 +20,7 @@
   /* Design tokens for every extension Shadow DOM surface (AI dot, workbench,
    * selection popup, float ball, rule-mode hint). Dark values are the base —
    * they match the historical hardcoded colors exactly; the light theme is
-   * the override block on `.duo-ai-root[data-theme="light"]` below. */
+   * the override block on `.fluento-ai-root[data-theme="light"]` below. */
   --color-bg: #070b14;                          /* input/select wells */
   --color-bg-deep: #0a111c;                     /* footer strips */
   --color-surface: #0f1623;                     /* panel background */
@@ -57,7 +57,7 @@
 
 /* Re-establish a font baseline inside the shadow root since :host { all:
  * initial } strips inherited font. */
-.duo-ai-root {
+.fluento-ai-root {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
   line-height: 1.45;
@@ -67,7 +67,7 @@
 /* Light theme — token overrides scoped to the mount root. `data-theme` is
  * kept in sync by bindThemeToElement() (utils/theme.ts) at every mount site;
  * custom properties inherit to the whole shadow tree. */
-.duo-ai-root[data-theme="light"] {
+.fluento-ai-root[data-theme="light"] {
   color-scheme: light;
   --color-bg: #f3f5fa;
   --color-bg-deep: #eef1f7;
@@ -113,33 +113,33 @@
  * "transparent background, dark text" — i.e. invisible-on-dark. Using a
  * direct `linear-gradient()` value sidesteps the variable system entirely
  * and renders identically on every host site. */
-.duo-ai-primary {
+.fluento-ai-primary {
   background: linear-gradient(to bottom right, oklch(0.92 0.15 190), oklch(0.86 0.16 195));
   color: #04060a;
   font-weight: 500;
 }
-.duo-ai-primary:disabled {
+.fluento-ai-primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
 /* Light-theme primary button: deeper cyan gradient with white text (the dark
  * variant's bright gradient + near-black text would wash out on white). */
-.duo-ai-root[data-theme="light"] .duo-ai-primary {
+.fluento-ai-root[data-theme="light"] .fluento-ai-primary {
   background: linear-gradient(to bottom right, oklch(0.62 0.12 205), oklch(0.53 0.12 212));
   color: #ffffff;
 }
 
 /* Diff visualization — kept here so both DiffView and any future renderer
  * share one source of truth. */
-.duo-ai-ins {
+.fluento-ai-ins {
   background: #d4f8d4;
   color: #06371b;
   border-radius: 2px;
   padding: 0 2px;
   text-decoration: none;
 }
-.duo-ai-del {
+.fluento-ai-del {
   background: #ffd4d4;
   color: #7a0e0e;
   border-radius: 2px;

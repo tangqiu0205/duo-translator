@@ -20,13 +20,13 @@ export type SeedConfig = Record<string, unknown>;
 //  - aiUseForTranslatePage off => never route page translation through AI
 //  - translationCacheSwitch off => results never served from a stale cache
 export const DEFAULT_SEED: SeedConfig = {
-    config_globalSwitch: true,
-    config_defaultStrategy: 'always',
-    config_targetLanguage: 'zh-CN',
-    config_translateService: 'google',
-    config_aiUseForTranslatePage: false,
-    config_translationCacheSwitch: false,
-    config_floatBallSwitch: false,
+    fluento_config_globalSwitch: true,
+    fluento_config_defaultStrategy: 'always',
+    fluento_config_targetLanguage: 'zh-CN',
+    fluento_config_translateService: 'google',
+    fluento_config_aiUseForTranslatePage: false,
+    fluento_config_translationCacheSwitch: false,
+    fluento_config_floatBallSwitch: false,
 };
 
 export const test = base.extend<{

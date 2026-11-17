@@ -38,7 +38,7 @@ import { isInSelectionPopup, openSelectionTranslate } from "@/main/aiWriting/sel
  * selects something, so an ad iframe never pays for a React root.
  */
 
-const HOST_ID = "duo-selection-icon-host";
+const HOST_ID = "fluento-selection-icon-host";
 
 /**
  * Side of the icon button, px. Deliberately small: the pill sits on top of the
@@ -667,7 +667,7 @@ function ensureMounted(domain: string): void {
     }
     const host = document.createElement("div");
     host.id = HOST_ID;
-    host.setAttribute("data-duo-ai-ui", "");
+    host.setAttribute("data-fluento-ai-ui", "");
     document.documentElement.appendChild(host);
     iconHost = host;
     // Once built, the surface lives for the rest of the page — so it needs the
@@ -679,7 +679,7 @@ function ensureMounted(domain: string): void {
     const shadow = attachOwnShadow(host);
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     bindThemeToElement(mount);
     iconRoot = createRoot(mount);
@@ -824,7 +824,7 @@ function SelectionIconApp({
             // would count as a click on the video (pause).
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onClick={(e) => e.stopPropagation()}
-            data-duo-ai-ui=""
+            data-fluento-ai-ui=""
         >
             {/* Padding/gap/border come from the constants rather than utility
                 classes: the placement clamps are derived from the same numbers,

@@ -17,7 +17,7 @@ import type { useTts } from "./useTts";
 import type { SelectionPopupPrefs } from "./selectionPopupPrefs";
 import { LANGUAGES } from "@/main/constants";
 import type { ServiceOption } from "@/utils/service";
-import { DUO_LOGO_SVG } from "@/main/floatBall/logo";
+import { FLUENTO_LOGO_SVG } from "@/main/floatBall/logo";
 import { DictView } from "./DictView";
 import type { DictEntry } from "@/main/dict/types";
 
@@ -579,7 +579,7 @@ export function SelectionCard(props: SelectionCardProps) {
                     // the icon files are not in `web_accessible_resources`, so
                     // a host page cannot load them. Same reason as the float
                     // ball, which is where this constant comes from.
-                    dangerouslySetInnerHTML={{ __html: DUO_LOGO_SVG }}
+                    dangerouslySetInnerHTML={{ __html: FLUENTO_LOGO_SVG }}
                 />
                 {!prefs.hideHeaderConfig && (
                     <>

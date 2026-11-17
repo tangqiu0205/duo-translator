@@ -13,7 +13,7 @@ import { mockTranslateProviders, ZH } from '../mocks/translateRoutes';
 // it started an endless self-ping-pong that pinned a CPU core for as long as
 // the tab stayed open. `noScriptStartedPostMessage: true` in the entrypoint
 // turns the legacy message off.
-const SENTINEL = '__duo_e2e_sentinel__';
+const SENTINEL = '__fluento_e2e_sentinel__';
 
 async function messagesReceivedBy(frame: Frame) {
     // Positive sync point first: messages posted to one window are delivered
@@ -34,8 +34,8 @@ test.describe('@footprint content script footprint on the page', () => {
         await page.goto('/message-echo.html');
 
         // Translations prove the content script is running in both frames.
-        await expect(page.locator('#p1 .duo-translation')).toContainText(ZH);
-        await expect(page.frameLocator('#child').locator('#inframe .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#p1 .fluento-translation')).toContainText(ZH);
+        await expect(page.frameLocator('#child').locator('#inframe .fluento-translation')).toContainText(ZH);
 
         const child = page.frames().find((f) => f.url().endsWith('/message-echo-child.html'));
         expect(child, 'child frame').toBeTruthy();

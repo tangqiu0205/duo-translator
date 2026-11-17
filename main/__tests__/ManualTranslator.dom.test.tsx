@@ -27,6 +27,7 @@ const services = [
   { value: 'google', label: 'Google', iconId: 'google', isAi: false },
   { value: 'ai:one', label: 'AI', iconId: 'openai', isAi: true },
   { value: 'doubao', label: 'Doubao', iconId: 'doubao', isAi: false },
+  { value: 'freeAuto', label: 'Free translation', iconId: 'freeAuto', isAi: false },
 ];
 const button = (text: string) => Array.from(container.querySelectorAll('button')).find((element) => element.textContent === text)!;
 const byLabel = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
@@ -112,6 +113,20 @@ it.each(['ai:one', 'doubao', 'microsoft'])('does not send text to a separate det
   expect(byLabel('Read translation').disabled).toBe(false);
   await act(async () => byLabel('Read translation').click());
   expect(mocks.toggle).toHaveBeenCalledWith('result', '你好', 'zh-CN');
+});
+
+it('shows the actual pool service and keeps explicit source selection available', async () => {
+  mocks.translate.mockResolvedValue([{ translatedMappedHtmlText: '你好 &amp; 世界', sourceLang: 'en', actualService: 'google' }]);
+  await render();
+  await choose(2, 'freeAuto');
+  expect(container.querySelectorAll('select')[0].disabled).toBe(false);
+  await choose(0, 'en');
+  await input('Hello & world');
+  await act(async () => button('Translate').click());
+  expect(mocks.translate).toHaveBeenCalledWith('freeAuto', ['Hello &amp; world'], 'zh-CN', expect.any(AbortSignal), 'en');
+  expect(container.querySelector('[role="status"]')?.textContent).toBe('你好 & 世界');
+  expect(container.textContent).toContain('Service: google');
+  expect(mocks.detect).not.toHaveBeenCalled();
 });
 
 it('ignores the composition Enter key, while supporting Cmd+Enter', async () => {
@@ -308,6 +323,13 @@ it('can stop following and keep independently selected languages across page cha
   expect(container.querySelectorAll('select')[1].disabled).toBe(false);
   expect(container.querySelectorAll('select')[1].value).toBe('ja');
   expect(container.querySelectorAll('select')[2].value).toBe('microsoft');
+});
+
+it.each(['transmart', 'volcengine', 'lara', 'modernMt'])('escapes and decodes %s manual text exactly once', (id) => {
+  const text = 'A & B <tag> &amp;';
+  const escaped = 'A &amp; B &lt;tag&gt; &amp;amp;';
+  expect(prepareManualText(id, text)).toBe(escaped);
+  expect(readManualText(id, escaped)).toBe(text);
 });
 
 it('escapes HTML-backed plain inputs and decodes output without executing markup', () => {

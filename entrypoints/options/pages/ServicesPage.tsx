@@ -6,6 +6,7 @@ import { ACTION, CONFIG_KEY, STATUS_SUCCESS, TRANSLATE_SERVICE } from '@/main/co
 import { getConfig, setConfig, setConfigOrThrow } from '@/utils/db';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BILIBILI_MODELS, DEFAULT_BILIBILI_MODEL } from '@/main/publicTranslationConfig';
+import { FreeTranslationDialog } from '@/components/options/FreeTranslationDialog';
 import { BuiltinAiModelDialog } from '@/components/options/BuiltinAiModelDialog';
 import { builtinAiApiAvailable } from '@/main/builtinAi/capability';
 import {
@@ -93,6 +94,7 @@ export function ServicesPage() {
     const [bilibiliModel, setBilibiliModel] = useState<string>(DEFAULT_BILIBILI_MODEL);
     const [bilibiliDraft, setBilibiliDraft] = useState<string>(DEFAULT_BILIBILI_MODEL);
     const [bilibiliOpen, setBilibiliOpen] = useState(false);
+    const [freeOpen, setFreeOpen] = useState(false);
     const [bilibiliSaving, setBilibiliSaving] = useState(false);
     const [bilibiliError, setBilibiliError] = useState('');
 
@@ -332,6 +334,10 @@ export function ServicesPage() {
 
     // Each editable service owns its own dialog — dispatch, don't early-return.
     const openEdit = (value: string) => {
+        if (value === TRANSLATE_SERVICE.FREE_AUTO) {
+            setFreeOpen(true);
+            return;
+        }
         if (value === TRANSLATE_SERVICE.BILIBILI) {
             setBilibiliDraft(bilibiliModel);
             setBilibiliError('');
@@ -606,6 +612,7 @@ export function ServicesPage() {
             </div>
 
             <AiProvidersCard />
+            <FreeTranslationDialog open={freeOpen} onClose={() => setFreeOpen(false)} onSaved={() => setTestStates((current) => ({ ...current, [TRANSLATE_SERVICE.FREE_AUTO]: { kind: 'idle' } }))} />
 
             <Dialog
                 open={bilibiliOpen}

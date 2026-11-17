@@ -197,7 +197,7 @@ function measure(
 // The mirror element
 // ---------------------------------------------------------------------------
 
-const HOST_ID = "duo-text-mirror-host";
+const HOST_ID = "fluento-text-mirror-host";
 
 let mirrorHost: HTMLElement | null = null;
 let mirrorEl: HTMLDivElement | null = null;

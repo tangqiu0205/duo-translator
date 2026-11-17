@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DE0000010000000000000001 /* DuoTranslator Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DE0000010000000000000011 /* DuoTranslator Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DE0000010000000000000001 /* Fluento Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DE0000010000000000000011 /* Fluento Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -16,7 +16,7 @@
 			containerPortal = DE0000010000000000000060 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = DE0000010000000000000051;
-			remoteInfo = "DuoTranslator Extension";
+			remoteInfo = "Fluento Extension";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -27,7 +27,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				DE0000010000000000000001 /* DuoTranslator Extension.appex in Embed Foundation Extensions */,
+				DE0000010000000000000001 /* Fluento Extension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -35,24 +35,24 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		DE0000010000000000000010 /* Duo Translator for Safari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Duo Translator for Safari.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		DE0000010000000000000011 /* DuoTranslator Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "DuoTranslator Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DE0000010000000000000010 /* Fluento for Safari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Fluento for Safari.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DE0000010000000000000011 /* Fluento Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fluento Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		DE0000010000000000000022 /* Exceptions for "App" folder in "DuoTranslator" target */ = {
+		DE0000010000000000000022 /* Exceptions for "App" folder in "Fluento" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = DE0000010000000000000050 /* DuoTranslator */;
+			target = DE0000010000000000000050 /* Fluento */;
 		};
-		DE0000010000000000000023 /* Exceptions for "Extension" folder in "DuoTranslator Extension" target */ = {
+		DE0000010000000000000023 /* Exceptions for "Extension" folder in "Fluento Extension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = DE0000010000000000000051 /* DuoTranslator Extension */;
+			target = DE0000010000000000000051 /* Fluento Extension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -60,7 +60,7 @@
 		DE0000010000000000000020 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				DE0000010000000000000022 /* Exceptions for "App" folder in "DuoTranslator" target */,
+				DE0000010000000000000022 /* Exceptions for "App" folder in "Fluento" target */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -68,7 +68,7 @@
 		DE0000010000000000000021 /* Extension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				DE0000010000000000000023 /* Exceptions for "Extension" folder in "DuoTranslator Extension" target */,
+				DE0000010000000000000023 /* Exceptions for "Extension" folder in "Fluento Extension" target */,
 			);
 			path = Extension;
 			sourceTree = "<group>";
@@ -105,8 +105,8 @@
 		DE0000010000000000000041 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				DE0000010000000000000010 /* Duo Translator for Safari.app */,
-				DE0000010000000000000011 /* DuoTranslator Extension.appex */,
+				DE0000010000000000000010 /* Fluento for Safari.app */,
+				DE0000010000000000000011 /* Fluento Extension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -114,9 +114,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		DE0000010000000000000050 /* DuoTranslator */ = {
+		DE0000010000000000000050 /* Fluento */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = DE00000100000000000000C2 /* Build configuration list for PBXNativeTarget "DuoTranslator" */;
+			buildConfigurationList = DE00000100000000000000C2 /* Build configuration list for PBXNativeTarget "Fluento" */;
 			buildPhases = (
 				DE0000010000000000000090 /* Sources */,
 				DE0000010000000000000030 /* Frameworks */,
@@ -131,16 +131,16 @@
 			fileSystemSynchronizedGroups = (
 				DE0000010000000000000020 /* App */,
 			);
-			name = DuoTranslator;
+			name = Fluento;
 			packageProductDependencies = (
 			);
-			productName = DuoTranslator;
-			productReference = DE0000010000000000000010 /* Duo Translator for Safari.app */;
+			productName = Fluento;
+			productReference = DE0000010000000000000010 /* Fluento for Safari.app */;
 			productType = "com.apple.product-type.application";
 		};
-		DE0000010000000000000051 /* DuoTranslator Extension */ = {
+		DE0000010000000000000051 /* Fluento Extension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = DE00000100000000000000C1 /* Build configuration list for PBXNativeTarget "DuoTranslator Extension" */;
+			buildConfigurationList = DE00000100000000000000C1 /* Build configuration list for PBXNativeTarget "Fluento Extension" */;
 			buildPhases = (
 				DE0000010000000000000091 /* Sources */,
 				DE0000010000000000000031 /* Frameworks */,
@@ -154,11 +154,11 @@
 			fileSystemSynchronizedGroups = (
 				DE0000010000000000000021 /* Extension */,
 			);
-			name = "DuoTranslator Extension";
+			name = "Fluento Extension";
 			packageProductDependencies = (
 			);
-			productName = "DuoTranslator Extension";
-			productReference = DE0000010000000000000011 /* DuoTranslator Extension.appex */;
+			productName = "Fluento Extension";
+			productReference = DE0000010000000000000011 /* Fluento Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -179,7 +179,7 @@
 					};
 				};
 			};
-			buildConfigurationList = DE00000100000000000000C0 /* Build configuration list for PBXProject "DuoTranslator" */;
+			buildConfigurationList = DE00000100000000000000C0 /* Build configuration list for PBXProject "Fluento" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -194,8 +194,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				DE0000010000000000000050 /* DuoTranslator */,
-				DE0000010000000000000051 /* DuoTranslator Extension */,
+				DE0000010000000000000050 /* Fluento */,
+				DE0000010000000000000051 /* Fluento Extension */,
 			);
 		};
 /* End PBXProject section */
@@ -259,7 +259,7 @@
 /* Begin PBXTargetDependency section */
 		DE00000100000000000000A0 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = DE0000010000000000000051 /* DuoTranslator Extension */;
+			target = DE0000010000000000000051 /* Fluento Extension */;
 			targetProxy = DE0000010000000000000002 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -302,7 +302,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 175;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 4R5A8D8B77;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -374,7 +374,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 175;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 4R5A8D8B77;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -409,14 +409,14 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Extension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Duo Translator for Safari";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fluento for Safari";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Duo Translator";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.duotranslator.safari.extension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluento.safari.extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};
@@ -430,14 +430,14 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Extension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Duo Translator for Safari";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fluento for Safari";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Duo Translator";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.duotranslator.safari.extension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluento.safari.extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};
@@ -453,15 +453,15 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Duo Translator for Safari";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fluento for Safari";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Duo Translator";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.duotranslator.safari;
-				PRODUCT_NAME = "Duo Translator for Safari";
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluento.safari;
+				PRODUCT_NAME = "Fluento for Safari";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 			};
 			name = Debug;
@@ -476,15 +476,15 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Duo Translator for Safari";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fluento for Safari";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Duo Translator";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.duotranslator.safari;
-				PRODUCT_NAME = "Duo Translator for Safari";
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluento.safari;
+				PRODUCT_NAME = "Fluento for Safari";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 			};
 			name = Release;
@@ -492,7 +492,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		DE00000100000000000000C0 /* Build configuration list for PBXProject "DuoTranslator" */ = {
+		DE00000100000000000000C0 /* Build configuration list for PBXProject "Fluento" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DE00000100000000000000B0 /* Debug */,
@@ -501,7 +501,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DE00000100000000000000C1 /* Build configuration list for PBXNativeTarget "DuoTranslator Extension" */ = {
+		DE00000100000000000000C1 /* Build configuration list for PBXNativeTarget "Fluento Extension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DE00000100000000000000B2 /* Debug */,
@@ -510,7 +510,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DE00000100000000000000C2 /* Build configuration list for PBXNativeTarget "DuoTranslator" */ = {
+		DE00000100000000000000C2 /* Build configuration list for PBXNativeTarget "Fluento" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DE00000100000000000000B4 /* Debug */,

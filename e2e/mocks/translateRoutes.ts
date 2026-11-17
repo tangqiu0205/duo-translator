@@ -1,14 +1,14 @@
 import type { BrowserContext } from '@playwright/test';
 
 // Sentinel prefix injected into every mocked translation so specs can assert
-// that a `.duo-translation` node was produced by the (mocked) provider rather
+// that a `.fluento-translation` node was produced by the (mocked) provider rather
 // than by anything else on the page.
 export const ZH = '「译」';
 
 /**
  * What the (mocked) providers were actually asked to translate.
  *
- * Counting `.duo-translation` nodes cannot tell "nothing was re-sent" from
+ * Counting `.fluento-translation` nodes cannot tell "nothing was re-sent" from
  * "it was re-sent and the result happened to look the same" — the
  * same-language drop and the echo guard both hide a redundant request. So the
  * incremental specs assert on the request payloads instead.

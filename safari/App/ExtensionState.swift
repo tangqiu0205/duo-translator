@@ -1,6 +1,6 @@
 //
 //  ExtensionState.swift
-//  DuoTranslator
+//  Fluento
 //
 //  Thin wrapper over SafariServices: is the extension enabled, and open
 //  Safari's extension settings. The extension's bundle identifier is derived
@@ -23,9 +23,9 @@ final class ExtensionState {
 
     private(set) var status: Status = .unknown
 
-    /// Must match PRODUCT_BUNDLE_IDENTIFIER of the "DuoTranslator Extension" target.
+    /// Must match PRODUCT_BUNDLE_IDENTIFIER of the "Fluento Extension" target.
     nonisolated static let extensionIdentifier: String = {
-        (Bundle.main.bundleIdentifier ?? "com.duotranslator.safari") + ".extension"
+        (Bundle.main.bundleIdentifier ?? "com.fluento.safari") + ".extension"
     }()
 
     static var version: String {

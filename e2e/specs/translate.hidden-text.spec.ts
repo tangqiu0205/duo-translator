@@ -51,7 +51,7 @@ test.describe('@hidden-text language detection', () => {
     test.beforeEach(async ({ context, seedConfig }) => {
         // 'auto' hands the translate/skip decision to detectLanguage; the seeded
         // target language is zh-CN.
-        await seedConfig({ config_defaultStrategy: 'auto' });
+        await seedConfig({ fluento_config_defaultStrategy: 'auto' });
         await mockTranslateProviders(context);
     });
 
@@ -63,12 +63,12 @@ test.describe('@hidden-text language detection', () => {
             await page.goto(`/hidden-text.html?hide=${recipe}`, { waitUntil: 'domcontentloaded' });
 
             expect(await log).toContain('zh-CN');
-            await expect(page.locator('#visible .duo-translation')).toHaveCount(0);
+            await expect(page.locator('#visible .fluento-translation')).toHaveCount(0);
 
             // Proves the negative above is a decision, not a dead content
             // script: the same page translates on demand.
             await sendAction(serviceWorker, 'translate');
-            await expect(page.locator('#visible .duo-translation').first()).toBeVisible();
+            await expect(page.locator('#visible .fluento-translation').first()).toBeVisible();
         });
     }
 
@@ -80,7 +80,7 @@ test.describe('@hidden-text language detection', () => {
         await page.goto('/hidden-text.html?hide=offscreen&on=ancestor', { waitUntil: 'domcontentloaded' });
 
         expect(await log).toContain('zh-CN');
-        await expect(page.locator('#visible .duo-translation')).toHaveCount(0);
+        await expect(page.locator('#visible .fluento-translation')).toHaveCount(0);
     });
 
     // The collapsed-panel wrapper is the case per-element geometry cannot see:
@@ -91,7 +91,7 @@ test.describe('@hidden-text language detection', () => {
         await page.goto('/hidden-text.html?hide=collapsed&on=ancestor', { waitUntil: 'domcontentloaded' });
 
         expect(await log).toContain('zh-CN');
-        await expect(page.locator('#visible .duo-translation')).toHaveCount(0);
+        await expect(page.locator('#visible .fluento-translation')).toHaveCount(0);
     });
 
     // Mirror image, so the suite cannot pass by simply never translating:
@@ -101,7 +101,7 @@ test.describe('@hidden-text language detection', () => {
         await page.goto('/hidden-text.html?hide=offscreen&visible=en', { waitUntil: 'domcontentloaded' });
 
         expect(await log).toMatch(/\ben\b/);
-        await expect(page.locator('#visible .duo-translation').first()).toBeVisible();
+        await expect(page.locator('#visible .fluento-translation').first()).toBeVisible();
     });
 
     // A display:contents container generates no box of its own (0x0 rect) while
@@ -124,20 +124,20 @@ test.describe('@hidden-text language detection', () => {
     // IntersectionObserver translates them the moment they are revealed — this
     // is what breaks if the visibility check ever leaks into marking.
     test('still translates hidden paragraphs once they are revealed', async ({ page, seedConfig }) => {
-        await seedConfig({ config_defaultStrategy: 'always' });
+        await seedConfig({ fluento_config_defaultStrategy: 'always' });
         // `on=ancestor` keeps each hidden <p> a paragraph of its own: a
         // display:none child is classified inline, so per-paragraph hiding would
         // collapse the whole block into a single unit on the host.
         await page.goto('/hidden-text.html?hide=offscreen&on=ancestor&visible=en', { waitUntil: 'domcontentloaded' });
 
-        await expect(page.locator('#visible .duo-translation').first()).toBeVisible();
+        await expect(page.locator('#visible .fluento-translation').first()).toBeVisible();
         // Parked offscreen, so the IntersectionObserver has not reached them.
-        await expect(page.locator('#hidden-host .duo-translation')).toHaveCount(0);
+        await expect(page.locator('#hidden-host .fluento-translation')).toHaveCount(0);
 
         await page.evaluate(() => {
             document.getElementById('hidden-host')?.classList.remove('hide-offscreen');
         });
 
-        await expect(page.locator('#hidden-host .duo-translation').first()).toBeVisible();
+        await expect(page.locator('#hidden-host .fluento-translation').first()).toBeVisible();
     });
 });

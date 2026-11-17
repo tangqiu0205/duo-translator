@@ -211,7 +211,7 @@ describe("getElementPreProcessResult — the translating indicator", () => {
         const p = document.body.querySelector("p")! as HTMLElement;
         const clean = getElementPreProcessResult(p, VIEW_STRATEGY.SINGLE);
 
-        document.body.innerHTML = "<p><duo-loading></duo-loading>Hello <b>world</b><duo-loading></duo-loading></p>";
+        document.body.innerHTML = "<p><fluento-loading></fluento-loading>Hello <b>world</b><fluento-loading></fluento-loading></p>";
         const marked = document.body.querySelector("p")! as HTMLElement;
         const withMarkers = getElementPreProcessResult(marked, VIEW_STRATEGY.SINGLE);
 

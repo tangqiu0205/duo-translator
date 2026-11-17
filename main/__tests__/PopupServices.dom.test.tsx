@@ -76,6 +76,12 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it('shows the Fluento brand and loads the logo without depending on storage identity variables', () => {
+  const header = container.querySelector('.popup-header')!;
+  expect(header.textContent).toContain('Fluento');
+  expect(header.querySelector('img')?.getAttribute('src')).toBe('/Fluento.svg');
+});
+
 it('shows all three service pickers inline under an icon heading, without a summary popup', async () => {
   expect(advanced().getAttribute('aria-expanded')).toBe('false');
   await act(async () => advanced().click());

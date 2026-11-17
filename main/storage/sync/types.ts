@@ -80,7 +80,7 @@ export type SyncResult =
 // errors cross `sendMessage` to Options, where the prototype is gone anyway.
 // ---------------------------------------------------------------------------
 
-const TRANSIENT_FLAG = '__duoTransientSync';
+const TRANSIENT_FLAG = '__fluentoTransientSync';
 
 /** Tag `e` as "will retry on its own"; returns it so it can be thrown inline. */
 export function markTransient<E extends Error>(e: E): E {

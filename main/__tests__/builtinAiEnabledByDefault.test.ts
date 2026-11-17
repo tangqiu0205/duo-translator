@@ -35,6 +35,34 @@ afterEach(() => {
     vi.resetModules();
 });
 
+describe("service display order and fallback", () => {
+    it("pins the aggregate in settings and pickers without changing the default service", async () => {
+        const { mod, enabledTranslateServices, activeService } = await enabledServices(false, []);
+        expect(mod.listTranslateServices()[0].value).toBe(TRANSLATE_SERVICE.FREE_AUTO);
+        expect(mod.buildServiceOptions(enabledTranslateServices, [])[0].value).toBe(TRANSLATE_SERVICE.FREE_AUTO);
+        expect(activeService).toBe(TRANSLATE_SERVICE.MICROSOFT);
+    });
+
+    it("preserves explicit pool and individual service selections", async () => {
+        const { mod, enabledTranslateServices } = await enabledServices(false, []);
+        for (const value of [TRANSLATE_SERVICE.FREE_AUTO, TRANSLATE_SERVICE.GOOGLE]) {
+            expect(mod.resolveActiveService(value, enabledTranslateServices, [])).toBe(value);
+        }
+    });
+
+    it("does not select the pool when a configured service or AI provider disappears", async () => {
+        const { mod, enabledTranslateServices } = await enabledServices(false, [TRANSLATE_SERVICE.MICROSOFT]);
+        for (const value of [undefined, 'removed', 'ai:removed', TRANSLATE_SERVICE.MICROSOFT]) {
+            expect(mod.resolveActiveService(value, enabledTranslateServices, [])).toBe(TRANSLATE_SERVICE.GOOGLE);
+        }
+    });
+
+    it("does not include the pinned aggregate when explicitly disabled", async () => {
+        const { mod, enabledTranslateServices } = await enabledServices(false, [TRANSLATE_SERVICE.FREE_AUTO]);
+        expect(mod.buildServiceOptions(enabledTranslateServices, [])[0].value).toBe(TRANSLATE_SERVICE.MICROSOFT);
+    });
+});
+
 describe("built-in AI availability gating", () => {
     it("is offered by default when the browser has the on-device API", async () => {
         // Empty disabled list = the shipped default, since DEFAULT_VALUE no
@@ -58,7 +86,7 @@ describe("built-in AI availability gating", () => {
         // A stored selection pointing at it must degrade rather than stick, or
         // the user sits on a service that can never answer.
         expect(mod.resolveActiveService(TRANSLATE_SERVICE.BUILTIN, enabledTranslateServices, []))
-            .toBe(enabledTranslateServices[0].value);
+            .toBe(TRANSLATE_SERVICE.MICROSOFT);
     });
 
     it("still honours an explicit opt-out on a capable browser", async () => {

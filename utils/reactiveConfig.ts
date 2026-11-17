@@ -17,14 +17,14 @@ import { configDefault, type CONFIG_KEY } from "@/main/constants";
  * This module is deliberately config-agnostic — it works for any `CONFIG_KEY`,
  * not just the AI-writing ones — so popup / options / content can adopt it too.
  *
- * Keys live in the `local:` area under the `config_` prefix, matching
- * `configStore.ts` (`local:config_<name>`). Reads here go straight to storage
+ * Keys live in the `local:` area under the `fluento_config_` prefix, matching
+ * `configStore.ts` (`local:fluento_config_<name>`). Reads here go straight to storage
  * (no background round-trip); writes still go through `setConfig` so cloud-sync
  * bookkeeping (`touchKey`) stays intact, and the resulting change event feeds
  * back through `watch` to refresh every reader.
  */
 
-const CONFIG_AREA_PREFIX = "local:config_";
+const CONFIG_AREA_PREFIX = "local:fluento_config_";
 const storageKey = (key: CONFIG_KEY): StorageItemKey =>
     `${CONFIG_AREA_PREFIX}${key}` as StorageItemKey;
 

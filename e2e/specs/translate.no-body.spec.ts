@@ -74,7 +74,7 @@ test.describe('@no-body documents without a <body>', () => {
 
         await page.goto('/no-body.html');
         // Positive sync point: the ordinary top frame still translates.
-        await expect(page.locator('#top .duo-translation')).toContainText(ZH);
+        await expect(page.locator('#top .fluento-translation')).toContainText(ZH);
 
         for (const file of ['no-body.xhtml', 'no-body.svg']) {
             const frameId = await frameIdOf(cdp, file);

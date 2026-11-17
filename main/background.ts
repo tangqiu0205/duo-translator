@@ -26,7 +26,6 @@ import { getDomainWithPortFromUrl } from '@/utils/url';
 import { configRepo, domainRepo, ruleRepo, type DomainDoc, type DomainField } from "@/main/storage/configStore";
 import * as translationCache from "@/main/storage/translationCache";
 import { synthesizeTts } from "@/main/ttsService";
-import { migrateFromPouchIfNeeded } from "@/main/storage/migrateFromPouch";
 import { buildSnapshot, applyImportedSnapshot, redactSecrets } from "@/main/storage/snapshot";
 import {
     getActiveProviderId,
@@ -50,7 +49,7 @@ import { ABORT_SCOPE, handleAbort, handleAbortable, handleAsync } from "@/main/m
 /**
  * Toolbar icon shown while a tab's page is translated: the logo with a green
  * check badge at the bottom right, rendered by `pnpm icon:translated`
- * (scripts/translated-icon.mjs) from public/DuoTranslator.svg. 16/32 are what
+ * (scripts/translated-icon.mjs) from public/Fluento.svg. 16/32 are what
  * toolbars actually draw (1x/2x); 48/128 keep the set complete.
  */
 const TRANSLATED_ICON_PATHS: Record<string, string> = {
@@ -122,13 +121,8 @@ export async function background() {
             }
         }
 
-        // Safety-net: in case the onInstalled-driven migration was killed by a
-        // SW shutdown, retry on every boot. The migration module itself is
-        // idempotent (flag-checked) so this is a near-free no-op once done.
-        !IS_FIREFOX && await migrateFromPouchIfNeeded({ trigger: 'startup' });
-
-        // Schedule periodic auto-sync + run the startup sync (if enabled) once
-        // migration settled.
+        // Fluento starts with its own storage; no upstream data is imported.
+        // Schedule periodic auto-sync and run startup sync when enabled.
         void startAutoSync();
     })();
     //#endregion
@@ -921,20 +915,6 @@ export async function background() {
 }
 
 //#region outer
-// Module-top: react to install/update events. `update` triggers the one-shot
-// PouchDB → chrome.storage.local migration. `install` skips it (no legacy data).
-// MV3 SW can be killed mid-listener, so background() also fires a safety-net
-// tail call on every boot.
-!IS_FIREFOX && browser.runtime.onInstalled.addListener(({ reason }) => {
-    if (reason === 'update') {
-        void migrateFromPouchIfNeeded({ trigger: 'onInstalled' });
-    } else if (reason === 'install') {
-        // Fresh install — still mark the migration done so the startup tail
-        // doesn't try to open PouchDB on every boot.
-        void migrateFromPouchIfNeeded({ trigger: 'onInstalled' });
-    }
-});
-
 // Background self-rendered strings (currently the context menu titles) look up
 // INTERFACE_LOCALES from utils/interfaceLang.ts. Chrome's chrome.i18n.getMessage
 // is locked to the browser UI language at install time, so for a

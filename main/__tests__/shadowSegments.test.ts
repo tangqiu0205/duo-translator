@@ -188,7 +188,7 @@ describe("segmentParagraph over a ShadowRoot", () => {
         expect(segmentParagraph(root).units[0].translated).toBe(false);
 
         const translation = document.createElement("div");
-        translation.className = "duo-translation";
+        translation.className = "fluento-translation";
         root.appendChild(translation);
         expect(segmentParagraph(root).units[0].translated).toBe(true);
     });

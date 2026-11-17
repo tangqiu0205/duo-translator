@@ -102,7 +102,7 @@ beforeEach(() => {
 });
 
 describe("collectionIdentity registry", () => {
-    it("identifies every array-valued config key plus the dynamic rule_ prefix", () => {
+    it("identifies every array-valued config key plus the dynamic fluento_rule_ prefix", () => {
         expect(collectionIdentity(PROVIDERS)!(p("p1"))).toBe("p1");
         expect(collectionIdentity(`${STORAGE_PREFIX.CONFIG}${CONFIG_KEY.SITE_RULE_USER}`)!({ id: "r1" })).toBe("r1");
         // Subscriptions have no `id` field — the URL is the identity.
@@ -188,7 +188,7 @@ describe("mergeSnapshots — collection keys", () => {
     });
 
     it("treats a whole-key deletion as a death event for every element it held", () => {
-        // Local deleted rule_example.com entirely at T0+400. Remote still has
+        // Local deleted fluento_rule_example.com entirely at T0+400. Remote still has
         // two selectors, last written at T0+100.
         const local = snap({
             tombstones: { [RULE_HOST]: T0 + 400 },
@@ -436,7 +436,7 @@ describe("configStore element bookkeeping", () => {
         // only a key-level clock. Without the seed, the next unrelated edit
         // would make every old element look brand new.
         store[PROVIDERS] = [p("p1"), p("p2")];
-        store["__sync_meta"] = { clocks: { [PROVIDERS]: T0 }, tombstones: {}, elements: {} };
+        store["__fluento_sync_meta"] = { clocks: { [PROVIDERS]: T0 }, tombstones: {}, elements: {} };
 
         await configRepo.set(CONFIG_KEY.AI_PROVIDERS, [p("p1"), p("p2"), p("p3")]);
         const meta = (await getSyncMeta()).elements[PROVIDERS];

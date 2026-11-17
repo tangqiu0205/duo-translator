@@ -11,7 +11,7 @@ import {
     isNotTranslateElement,
 } from "@/main/dom/predicates";
 import {
-    removeDuoClassAndAttribute,
+    removeFluentoClassAndAttribute,
     removeTextNodes,
     getTextNodesAndText,
     isContainsValidTextElement,
@@ -54,18 +54,18 @@ describe("isExcludedNodeType", () => {
 
 describe("isNotMarkElement", () => {
     it("is true for our own translation output or excluded tags", () => {
-        expect(isNotMarkElement(el('<div class="duo-translation">x</div>'))).toBe(true);
+        expect(isNotMarkElement(el('<div class="fluento-translation">x</div>'))).toBe(true);
         expect(isNotMarkElement(el("<code>x</code>"))).toBe(true);
         expect(isNotMarkElement(el("<p>x</p>"))).toBe(false);
     });
 
     it("rejects the highlight fallback's own spans", () => {
-        // On the <duo-span> path the run's text is moved into these, so a scan
+        // On the <fluento-span> path the run's text is moved into these, so a scan
         // that marked one would translate our own output a second time, inside
         // the original. `curTranslated` qualifying the run is the first line of
         // defense; this is the second.
-        expect(isNotMarkElement(el("<duo-span>x</duo-span>"))).toBe(true);
-        expect(isNotMarkElement(el('<br class="duo-divide">'))).toBe(true);
+        expect(isNotMarkElement(el("<fluento-span>x</fluento-span>"))).toBe(true);
+        expect(isNotMarkElement(el('<br class="fluento-divide">'))).toBe(true);
     });
 });
 
@@ -93,13 +93,13 @@ describe("isEditable", () => {
 // ---------------------------------------------------------------------------
 // textNodes
 // ---------------------------------------------------------------------------
-describe("removeDuoClassAndAttribute", () => {
-    it("strips only duo-* classes and attributes", () => {
-        const e = el('<p class="keep duo-test" duo-id="5" title="t">x</p>');
-        removeDuoClassAndAttribute(e);
+describe("removeFluentoClassAndAttribute", () => {
+    it("strips only fluento-* classes and attributes", () => {
+        const e = el('<p class="keep fluento-test" fluento-id="5" title="t">x</p>');
+        removeFluentoClassAndAttribute(e);
         expect(e.classList.contains("keep")).toBe(true);
-        expect(e.classList.contains("duo-test")).toBe(false);
-        expect(e.hasAttribute("duo-id")).toBe(false);
+        expect(e.classList.contains("fluento-test")).toBe(false);
+        expect(e.hasAttribute("fluento-id")).toBe(false);
         expect(e.getAttribute("title")).toBe("t");
     });
 });

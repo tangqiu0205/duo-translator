@@ -3,7 +3,7 @@
 //
 // The repo had no URL matching at all before this — utils/url.ts only reduces a
 // URL to `hostname[:port]`, which is what the per-domain strategy and the old
-// `rule_<host>` selector list key off. Rules need path/query granularity
+// `fluento_rule_<host>` selector list key off. Rules need path/query granularity
 // (`github.com/*/blob/*` vs `github.com/*/issues/*`), hence this module.
 //
 // Two syntaxes, distinguished by the first character:

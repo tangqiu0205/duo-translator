@@ -9,7 +9,7 @@ import { checkPublicAbort, ensurePublicHeaders, PublicRequestLimiter, PublicTran
 import { translatePublicMapped, type PublicTranslation } from '@/main/publicTranslationText';
 
 const limiter = new PublicRequestLimiter(3, 1000, 2); // Shared by all three engines.
-const DEVICE_KEY = '__doubao_translation_device'; // Device-local, not a config/sync key.
+const DEVICE_KEY = '__fluento_doubao_translation_device'; // Device-local, not a config/sync key.
 const MAX_RESPONSE_BYTES = 1_000_000;
 const ARTICLE_LANGUAGES = new Set('en ja ko fr de es pt ru it ar th vi id ms tr nl pl'.split(' '));
 // Numeric interop data for /samantha/plugin/translate. Unknown tags use the
@@ -25,6 +25,10 @@ const SUBTITLE_LANGUAGES: Record<string, number> = {
     sr: 152, su: 154, sv: 156, sw: 157, ta: 158, te: 159, tg: 160, th: 161,
     fil: 164, tr: 167, uk: 173, ur: 174, uz: 175, vi: 177, 'zh-CN': 185, 'zh-TW': 1002,
 };
+export function supportsDoubaoTarget(target: string, scene?: 'subtitle'): boolean {
+    return scene === 'subtitle' && SUBTITLE_LANGUAGES[target] !== undefined
+        || target === 'zh-CN' || target === 'zh-TW' || ARTICLE_LANGUAGES.has(target);
+}
 let device: Promise<string> | undefined;
 async function deviceId(): Promise<string> {
     device ??= (async () => {

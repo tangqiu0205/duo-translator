@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "DE0000010000000000000050"
-               BuildableName = "Duo Translator for Safari.app"
-               BlueprintName = "DuoTranslator"
-               ReferencedContainer = "container:DuoTranslator.xcodeproj">
+               BuildableName = "Fluento for Safari.app"
+               BlueprintName = "Fluento"
+               ReferencedContainer = "container:Fluento.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -45,9 +45,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DE0000010000000000000050"
-            BuildableName = "Duo Translator for Safari.app"
-            BlueprintName = "DuoTranslator"
-            ReferencedContainer = "container:DuoTranslator.xcodeproj">
+            BuildableName = "Fluento for Safari.app"
+            BlueprintName = "Fluento"
+            ReferencedContainer = "container:Fluento.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DE0000010000000000000050"
-            BuildableName = "Duo Translator for Safari.app"
-            BlueprintName = "DuoTranslator"
-            ReferencedContainer = "container:DuoTranslator.xcodeproj">
+            BuildableName = "Fluento for Safari.app"
+            BlueprintName = "Fluento"
+            ReferencedContainer = "container:Fluento.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

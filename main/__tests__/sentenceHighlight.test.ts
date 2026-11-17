@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // Tests for main/dom/sentenceHighlight.ts — the sentence → Range mapping that
-// replaced the <duo-span> wrapping. Only the mapping is covered here: painting
+// replaced the <fluento-span> wrapping. Only the mapping is covered here: painting
 // (CSS.highlights) and hit-testing (getClientRects) need a real layout engine,
 // so they are e2e's job. What matters is that a range covers exactly its
 // sentence's characters, wherever the text-node boundaries happen to fall — and

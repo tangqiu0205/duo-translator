@@ -17,10 +17,10 @@
 // .ai/plans/sync-collection-element-level-merge.md):
 //   - identity is NOT always `e.id`: subscriptions are identified by `url`
 //     (the type has no id), and string collections are their own identity;
-//   - `rule_<host>` is a dynamic key, so prefix matching is required.
+//   - `fluento_rule_<host>` is a dynamic key, so prefix matching is required.
 //
 // The element clocks themselves are NOT stored inside the value — they live in
-// `__sync_meta.elements` (see configStore). The stored config keeps its plain
+// `__fluento_sync_meta.elements` (see configStore). The stored config keeps its plain
 // array shape, so every reader of AI_PROVIDERS / SITE_RULE_* is untouched.
 
 import { CONFIG_KEY } from '@/main/constants';
@@ -72,7 +72,7 @@ function ensureRegistry(): Record<string, ElementIdentity> {
         [cfg(CONFIG_KEY.SELECTION_POPUP_SERVICES)]: bySelf,
     };
     PREFIX = [
-        // rule_<host> — per-domain no-translate CSS selectors (string[]).
+        // fluento_rule_<host> — per-domain no-translate CSS selectors (string[]).
         [STORAGE_PREFIX.RULE, bySelf],
     ];
     return EXACT;

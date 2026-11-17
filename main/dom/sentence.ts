@@ -1,4 +1,4 @@
-// Sentence segmentation + the legacy text-node→<duo-span> wrapping. These back
+// Sentence segmentation + the legacy text-node→<fluento-span> wrapping. These back
 // the bilingual sentence-level highlighting.
 //
 // Two painting strategies consume `splitSentence`, picked at runtime by
@@ -8,7 +8,7 @@
 //     writing nothing to the page;
 //   - fallback: `wrapTextNode2Span` below, for browsers without that API
 //     (Firefox only shipped it in 140 / June 2025). It wraps each sentence in a
-//     <duo-span duo-sequence="i"> so plain class selectors can style it.
+//     <fluento-span fluento-sequence="i"> so plain class selectors can style it.
 // The fallback is the one that mutates page text nodes, which is why the
 // container's original text has to be backed up before it runs.
 
@@ -143,15 +143,15 @@ export function alignSentenceBlocks(original: string[], translated: string[]): A
 }
 
 /**
- * Wrap the given text nodes into <duo-span> elements, one run per sentence,
- * tagging each with `duo-sequence="<startSequence + sentence index>"`. Text
+ * Wrap the given text nodes into <fluento-span> elements, one run per sentence,
+ * tagging each with `fluento-sequence="<startSequence + sentence index>"`. Text
  * nodes are consumed greedily; when a sentence ends mid-node the node is
  * split. Every span created is registered in `ignoreMutationElements` so the
  * content script's mutation observer ignores our own DOM writes. Returns the
  * spans in creation order.
  *
  * `startSequence` lets callers wrapping several translation units of the same
- * container keep duo-sequence unique across the container (accumulate by each
+ * container keep fluento-sequence unique across the container (accumulate by each
  * batch's sentence count) — the highlight handler pairs original/translation
  * spans by that number.
  */
@@ -177,9 +177,9 @@ export function wrapTextNode2Span(
             if (sentence.length >= text.length) {
                 if (sentence.startsWith(text)) {
                     if (text.trim() !== '') {
-                        const span = document.createElement("duo-span");
+                        const span = document.createElement("fluento-span");
                         ignoreMutationElements.add(span);
-                        span.setAttribute("duo-sequence", (startSequence + i).toString());
+                        span.setAttribute("fluento-sequence", (startSequence + i).toString());
                         let spanText = document.createTextNode(text);
                         span.appendChild(spanText);
                         // parentNode, not parentElement: a text node sitting
@@ -200,9 +200,9 @@ export function wrapTextNode2Span(
                 if (text.startsWith(sentence)) {
                     textNodes[j].textContent = text.slice(sentence.length);
                     if (sentence.trim() === '') break
-                    const span = document.createElement("duo-span");
+                    const span = document.createElement("fluento-span");
                     ignoreMutationElements.add(span);
-                    span.setAttribute("duo-sequence", (startSequence + i).toString());
+                    span.setAttribute("fluento-sequence", (startSequence + i).toString());
                     let spanText = document.createTextNode(sentence);
                     span.appendChild(spanText);
                     textNodes[j].parentNode?.insertBefore(span, textNodes[j]);

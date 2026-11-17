@@ -22,7 +22,7 @@
 //
 // Units are *derived data* — recomputed from the live DOM on every call,
 // never stored. "Already translated" is likewise derived from the presence of
-// our own `.duo-translation` marker inside the run. This keeps the marking
+// our own `.fluento-translation` marker inside the run. This keeps the marking
 // pipeline zero-DOM-write and immune to page mutations invalidating stored
 // node lists.
 import {
@@ -103,7 +103,7 @@ export interface TranslationUnit {
     nodes: ChildNode[];
     /** True ⇒ `nodes` is exactly `container.childNodes` (legacy whole-element path). */
     wholeElement: boolean;
-    /** Derived: a `.duo-translation` marker already sits inside this run. */
+    /** Derived: a `.fluento-translation` marker already sits inside this run. */
     translated: boolean;
 }
 
@@ -568,23 +568,23 @@ function isMergeableRun(elements: HTMLElement[]): boolean {
     return mergeable > 1;
 }
 
-type NodeKind = "text" | "passive" | "duo-marker" | "duo-indicator" | "br" | "block" | "inline";
+type NodeKind = "text" | "passive" | "fluento-marker" | "fluento-indicator" | "br" | "block" | "inline";
 
 function classify(node: ChildNode): NodeKind {
     if (node.nodeType === Node.TEXT_NODE) return "text";
     if (node.nodeType !== Node.ELEMENT_NODE) return "passive";
     const el = node as HTMLElement;
     // The translating indicator is transient scaffolding, not output: unlike
-    // `duo-marker` it must not even set `sawSplitOrMarker`, or a container
+    // `fluento-marker` it must not even set `sawSplitOrMarker`, or a container
     // re-segmented while a spinner is up would lose the whole-element path and
     // translate under a different cache key than the same container does when
     // nothing is in flight.
-    if (isTranslateIndicator(el)) return "duo-indicator";
+    if (isTranslateIndicator(el)) return "fluento-indicator";
     if (
-        el.classList.contains("duo-translation") ||
-        el.classList.contains("duo-divide")
+        el.classList.contains("fluento-translation") ||
+        el.classList.contains("fluento-divide")
     ) {
-        return "duo-marker";
+        return "fluento-marker";
     }
     if (el.tagName === "BR") return "br";
     // Covers both "is a block box" and "is an inline wrapper hiding block
@@ -641,10 +641,10 @@ export function segmentParagraph(container: UnitContainer): SegmentScan {
         //   4. anything else → descend into the run's elements, each becoming a
         //      container of its own.
         //
-        // `curTranslated` (an adjacent .duo-translation) qualifies the run on
+        // `curTranslated` (an adjacent .fluento-translation) qualifies the run on
         // its own, so a re-scan can never descend into our own output and
         // translate an already-translated run a second time. This is load
-        // bearing on the <duo-span> highlight fallback: wrapping moves the run's
+        // bearing on the <fluento-span> highlight fallback: wrapping moves the run's
         // text into the spans and leaves the direct text nodes empty, so
         // criterion 1 stops firing and criterion 2 would "unwrap" straight into
         // our own output. The preferred Highlight-API path writes nothing to the
@@ -714,13 +714,13 @@ export function segmentParagraph(container: UnitContainer): SegmentScan {
                 resetBrStreak();
                 descendChildren.push(node as HTMLElement);
                 break;
-            case "duo-indicator":
+            case "fluento-indicator":
                 // Skipped entirely: not part of any unit, not a split, and no
                 // trace left in the scan's flags.
                 break;
-            case "duo-marker":
+            case "fluento-marker":
                 sawSplitOrMarker = true;
-                if ((node as HTMLElement).classList.contains("duo-translation")) {
+                if ((node as HTMLElement).classList.contains("fluento-translation")) {
                     curTranslated = true;
                 }
                 // Never part of a unit's nodes.

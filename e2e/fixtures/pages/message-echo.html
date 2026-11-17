@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Duo Translator e2e — window message footprint</title>
+    <title>Fluento e2e — window message footprint</title>
     <script>
         // Installed before the content script injects (it runs at
         // document_idle). Records every window `message` event this frame
@@ -17,7 +17,7 @@
         window.__received = [];
         window.__sentinelSeen = false;
         window.addEventListener('message', function (event) {
-            if (event.data === '__duo_e2e_sentinel__') {
+            if (event.data === '__fluento_e2e_sentinel__') {
                 window.__sentinelSeen = true;
                 return;
             }

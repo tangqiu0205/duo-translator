@@ -3,7 +3,7 @@ name: Publish to stores
 # Manual-only: submits an already-built release to the three extension stores.
 #
 # The ZIPs are NOT rebuilt here — they are downloaded from the GitHub Release
-# created by `duo-translator` (.github/workflows/build.yaml), so the bytes on
+# created by `fluento` (.github/workflows/build.yaml), so the bytes on
 # the store are byte-identical to the bytes on the release page. Run that
 # workflow first; this one fails loudly if the release or an asset is missing.
 #

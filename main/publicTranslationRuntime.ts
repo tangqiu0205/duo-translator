@@ -2,7 +2,10 @@
 // fixed provider endpoints. Never read cookies or modify arbitrary page traffic.
 import { browser } from 'wxt/browser';
 
-export type PublicProvider = 'bilibili' | 'doubao';
+import type { WebTranslationService } from '@/main/webTranslationConfig';
+
+type HeaderProvider = 'bilibili' | 'doubao';
+export type PublicProvider = HeaderProvider | WebTranslationService;
 export class PublicTranslationError extends Error {
     readonly detail: { code: string; provider: PublicProvider; status?: number };
     constructor(provider: PublicProvider, code: string, message: string, status?: number) {
@@ -16,8 +19,8 @@ export function checkPublicAbort(signal?: AbortSignal | null): void {
     if (signal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 }
 
-const headersReady = new Map<PublicProvider, Promise<void>>();
-export async function ensurePublicHeaders(provider: PublicProvider): Promise<void> {
+const headersReady = new Map<HeaderProvider, Promise<void>>();
+export async function ensurePublicHeaders(provider: HeaderProvider): Promise<void> {
     let ready = headersReady.get(provider);
     if (!ready) {
         ready = (async () => {

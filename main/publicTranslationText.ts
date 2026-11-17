@@ -5,6 +5,7 @@ import { checkPublicAbort } from '@/main/publicTranslationRuntime';
 
 export interface PublicTranslation { text: string; sourceLang: string }
 type Translate = (texts: string[]) => Promise<PublicTranslation[]>;
+export { decode as decodePublicTranslationText, escapeMapped as escapePublicTranslationHtml };
 const TAG = /^<\/?b\d+>$/;
 
 function decode(text: string): string {

@@ -1,7 +1,7 @@
 // "What has to happen to this run?" — answered from our own bookkeeping.
 //
 // The pipeline used to answer it from the DOM alone: `TranslationUnit.translated`
-// is true iff a `.duo-translation` sits inside the run. That signal is real but
+// is true iff a `.fluento-translation` sits inside the run. That signal is real but
 // partial, and it fails in both directions:
 //
 //   - **SINGLE never produces it.** That view writes the translation into the
@@ -33,7 +33,7 @@ import { contentValid } from "@/utils/dom";
  * The shape of a bookkeeping record, seen from here.
  *
  * Three field names for one concept because the two views record it under their
- * own: `DuoUnitRecord.covered` is the run's source text nodes captured before
+ * own: `BilingualUnitRecord.covered` is the run's source text nodes captured before
  * insertion, while a SINGLE `TranslateResult` keeps both the nodes it read
  * (`textNodes`) and the ones it wrote into (`replacedTextNodes`) — their union,
  * since the write-back reuses most but not all of them and may mint new ones.
@@ -48,7 +48,7 @@ export interface CoverageRecord {
 export type UnitPlan<D, S> =
     | { action: "translate" }
     | { action: "skip" }
-    | { action: "replace"; duo?: D; single?: S };
+    | { action: "replace"; bilingual?: D; single?: S };
 
 /** Every text node a record accounts for, deduplicated. */
 function coveredNodesOf(record: CoverageRecord): Text[] {
@@ -72,7 +72,7 @@ function unitHoldsNode(unit: TranslationUnit, node: Node): boolean {
  *
  * This is the "the page added something" half of the comparison, and the only
  * part that walks. It early-exits on the first unaccounted-for node, and skips
- * everything we ourselves put into the run — on the `<duo-span>` highlight
+ * everything we ourselves put into the run — on the `<fluento-span>` highlight
  * fallback the wrappers hold the run's own text, so counting them would mark
  * every highlighted paragraph as changed forever.
  *
@@ -132,7 +132,7 @@ function matchRecord(unit: TranslationUnit, record: CoverageRecord): RecordMatch
  * so the common case — a container we have never translated — costs two failed
  * Map lookups and nothing else.
  *
- * A run that carries a `.duo-translation` but matches no record ends up
+ * A run that carries a `.fluento-translation` but matches no record ends up
  * "skip" as well. That is the pre-existing behavior kept deliberately: the
  * bookkeeping is gone (the page rebuilt the run's nodes, or a re-scan dropped
  * the records), and translating again would insert a second translation next to
@@ -140,16 +140,16 @@ function matchRecord(unit: TranslationUnit, record: CoverageRecord): RecordMatch
  */
 export function planUnit<D extends CoverageRecord, S extends CoverageRecord>(
     unit: TranslationUnit,
-    duoRecords: readonly D[] | undefined,
+    bilingualRecords: readonly D[] | undefined,
     singleResults: readonly S[] | undefined,
 ): UnitPlan<D, S> {
-    let staleDuo: D | undefined;
+    let staleBilingual: D | undefined;
     let staleSingle: S | undefined;
-    if (duoRecords) {
-        for (const record of duoRecords) {
+    if (bilingualRecords) {
+        for (const record of bilingualRecords) {
             const match = matchRecord(unit, record);
             if (match === "same") return { action: "skip" };
-            if (match === "changed") staleDuo ??= record;
+            if (match === "changed") staleBilingual ??= record;
         }
     }
     if (singleResults) {
@@ -159,7 +159,7 @@ export function planUnit<D extends CoverageRecord, S extends CoverageRecord>(
             if (match === "changed") staleSingle ??= result;
         }
     }
-    if (staleDuo || staleSingle) return { action: "replace", duo: staleDuo, single: staleSingle };
+    if (staleBilingual || staleSingle) return { action: "replace", bilingual: staleBilingual, single: staleSingle };
     if (unit.translated) return { action: "skip" };
     return { action: "translate" };
 }

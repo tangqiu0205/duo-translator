@@ -37,7 +37,7 @@ import { ERROR_SCOPE, reportRequestError } from "@/main/errorReport";
 // Singleton mount
 // ---------------------------------------------------------------------------
 
-const HOST_ID = "duo-ai-workbench-host";
+const HOST_ID = "fluento-ai-workbench-host";
 let workbenchRoot: Root | null = null;
 let openSignal: ((seed: WorkbenchSeed) => void) | null = null;
 let stopKeepAlive: (() => void) | null = null;
@@ -55,7 +55,7 @@ export function ensureWorkbenchMounted(): void {
     if (!host) {
         host = document.createElement("div");
         host.id = HOST_ID;
-        host.setAttribute("data-duo-ai-ui", "");
+        host.setAttribute("data-fluento-ai-ui", "");
         document.documentElement.appendChild(host);
     }
     stopKeepAlive?.();
@@ -63,7 +63,7 @@ export function ensureWorkbenchMounted(): void {
     const shadow = attachOwnShadow(host);
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     stopThemeWatch?.();
     stopThemeWatch = bindThemeToElement(mount);
@@ -443,7 +443,7 @@ function WorkbenchApp({ registerOpen }: { registerOpen: (fn: (s: WorkbenchSeed) 
                             type="button"
                             onClick={run}
                             disabled={!input.trim()}
-                            className="duo-ai-primary h-7 px-3 inline-flex items-center gap-1 rounded-md text-[12px] shadow-[0_0_14px_rgba(70,210,230,0.4)]"
+                            className="fluento-ai-primary h-7 px-3 inline-flex items-center gap-1 rounded-md text-[12px] shadow-[0_0_14px_rgba(70,210,230,0.4)]"
                         >
                             <CornerDownLeft className="h-3 w-3" /> {t("aiRun", "Run")}
                         </button>
@@ -512,7 +512,7 @@ function WorkbenchApp({ registerOpen }: { registerOpen: (fn: (s: WorkbenchSeed) 
                         onClick={apply}
                         disabled={!output || !canApplyToTarget(targetRef.current)}
                         title={!canApplyToTarget(targetRef.current) ? t("aiNoEditableTarget", "Place the cursor in an editable input to apply") : undefined}
-                        className="duo-ai-primary h-7 px-3 inline-flex items-center gap-1 rounded-md text-[12px] disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="fluento-ai-primary h-7 px-3 inline-flex items-center gap-1 rounded-md text-[12px] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                         {t("aiApplyToInput", "Apply to input")}
                     </button>

@@ -12,11 +12,11 @@
 //     merged result, which is a few selectors.
 //
 // Storage layout (see CONFIG_KEY.SITE_RULE_* in main/constants.ts):
-//   config_siteRule*        — user rules, subscription list, on/off state. Cloud-synced.
-//   __site_rule_cache       — fetched package bodies, keyed by URL. NOT synced:
-//                             no `config_`/`domain_`/`rule_` prefix, and
+//   fluento_config_siteRule*        — user rules, subscription list, on/off state. Cloud-synced.
+//   __fluento_site_rule_cache       — fetched package bodies, keyed by URL. NOT synced:
+//                             no `fluento_config_`/`fluento_domain_`/`fluento_rule_` prefix, and
 //                             snapshot.ts gates every boundary on that
-//                             allow-list (same trick as __sync_meta).
+//                             allow-list (same trick as __fluento_sync_meta).
 //                             Re-fetchable data has no business inflating a
 //                             Drive/WebDAV snapshot.
 //                             This was WRONG for a while — buildSnapshot took
@@ -56,9 +56,9 @@ import {
     type SiteRuleSubscription,
 } from './types';
 
-const CACHE_KEY: StorageItemKey = 'local:__site_rule_cache';
+const CACHE_KEY: StorageItemKey = 'local:__fluento_site_rule_cache';
 /** Fetch metadata for the official package. It has no subscription-list entry. */
-const OFFICIAL_META_KEY: StorageItemKey = 'local:__site_rule_official';
+const OFFICIAL_META_KEY: StorageItemKey = 'local:__fluento_site_rule_official';
 const REFRESH_ALARM = 'siteRuleRefresh';
 /** Guard against a subscription URL that serves something enormous. */
 const MAX_PACKAGE_BYTES = 2 * 1024 * 1024;

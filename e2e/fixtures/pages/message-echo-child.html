@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Duo Translator e2e — window message footprint (child frame)</title>
+    <title>Fluento e2e — window message footprint (child frame)</title>
     <script>
         // Same recorder as message-echo.html: the content script runs in every
         // frame (all_frames), so every frame must stay silent.
         window.__received = [];
         window.__sentinelSeen = false;
         window.addEventListener('message', function (event) {
-            if (event.data === '__duo_e2e_sentinel__') {
+            if (event.data === '__fluento_e2e_sentinel__') {
                 window.__sentinelSeen = true;
                 return;
             }

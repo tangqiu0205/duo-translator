@@ -144,9 +144,9 @@ describe("buildTranslationCss", () => {
         highlightSwitch: false,
     };
 
-    it("emits a .duo-translation block from the translation options", () => {
+    it("emits a .fluento-translation block from the translation options", () => {
         const css = buildTranslationCss(base);
-        expect(css).toContain(".duo-translation {");
+        expect(css).toContain(".fluento-translation {");
         expect(css).toContain("background-color: #fff;");
         expect(css).toContain("color: #000;");
         expect(css).toContain("border: none;");
@@ -155,7 +155,7 @@ describe("buildTranslationCss", () => {
     it("omits the highlight block when highlightSwitch is off", () => {
         const css = buildTranslationCss(base);
         expect(css).not.toContain("::highlight(");
-        expect(css).not.toContain("duo-highlight-original");
+        expect(css).not.toContain("fluento-highlight-original");
     });
 
     it("emits both highlight strategies as separate rules when highlightSwitch is on", () => {
@@ -163,13 +163,13 @@ describe("buildTranslationCss", () => {
         // an unsupported selector invalidates only the rule it appears in — so
         // merging them would drop the class rule on the old browsers needing it.
         const css = buildTranslationCss({ ...base, highlightSwitch: true });
-        expect(css).toContain("::highlight(duo-hl-original), ::highlight(duo-hl-translation) {");
-        expect(css).toContain(".duo-highlight-original, .duo-highlight-translation {");
+        expect(css).toContain("::highlight(fluento-hl-original), ::highlight(fluento-hl-translation) {");
+        expect(css).toContain(".fluento-highlight-original, .fluento-highlight-translation {");
         expect(css.match(/background-color: #ff0;/g)).toHaveLength(2);
     });
 
     it("keeps a real border on the translation but remaps it on the highlight", () => {
-        // Same style name, two contexts: .duo-translation is a single block
+        // Same style name, two contexts: .fluento-translation is a single block
         // element (a border is fine and looks right), the highlight is neither.
         const css = buildTranslationCss({
             ...base,
@@ -177,9 +177,9 @@ describe("buildTranslationCss", () => {
             highlightStyle: "solidBorder",
             highlightSwitch: true,
         });
-        expect(css).toContain(".duo-translation { background-color: #fff; color: #000; border: 2px solid; }");
+        expect(css).toContain(".fluento-translation { background-color: #fff; color: #000; border: 2px solid; }");
         expect(css).toContain("text-decoration: underline overline solid;");
-        expect(css).not.toContain("duo-highlight-original, .duo-highlight-translation { background-color: #ff0; color: #111; border:");
+        expect(css).not.toContain("fluento-highlight-original, .fluento-highlight-translation { background-color: #ff0; color: #111; border:");
     });
 
     it("returns empty string when there is nothing to style", () => {
@@ -208,7 +208,7 @@ describe("buildTranslationCss", () => {
 
     it("gives only blur a hover rule — dim is a permanent de-emphasis", () => {
         expect(buildTranslationCss({ ...base, borderStyle: "blurText" })).toContain(
-            ".duo-translation:hover { filter: none; }",
+            ".fluento-translation:hover { filter: none; }",
         );
         expect(buildTranslationCss({ ...base, borderStyle: "dimText" })).not.toContain(":hover");
     });
@@ -217,8 +217,8 @@ describe("buildTranslationCss", () => {
         // A translation appended inline (span divide, i.e. short enough to skip
         // the <br>) must keep its colors but not grow a bar mid-sentence.
         const css = buildTranslationCss({ ...base, borderStyle: "quoteBar" });
-        expect(css).toContain(".duo-translation { color: #000; }");
-        expect(css).toContain("br.duo-divide + .duo-translation {");
+        expect(css).toContain(".fluento-translation { color: #000; }");
+        expect(css).toContain("br.fluento-divide + .fluento-translation {");
         expect(css).toContain("border-left: 3px solid #df5f47;");
         // inline-block, so the bar runs down every line of a wrapped translation
         // rather than marking the first line fragment only.

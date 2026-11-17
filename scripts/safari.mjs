@@ -10,12 +10,12 @@
 //   pnpm safari:archive        sync (production), archive, export a Mac App
 //                              Store .pkg into safari/build/export
 //   pnpm safari:icon           regenerate App/Assets.xcassets/AppIcon from
-//                              public/DuoTranslator.svg
+//                              public/Fluento.svg
 //   pnpm safari:dist           distribution OUTSIDE the App Store: sync,
 //                              archive, export with Developer ID, notarize,
 //                              staple, wrap into safari/build/dist/*.dmg.
 //                              Needs a one-time
-//                              `xcrun notarytool store-credentials duo-translator`
+//                              `xcrun notarytool store-credentials fluento`
 //                              (Apple ID + app-specific password + team id),
 //                              or set SAFARI_NOTARY_PROFILE to another name.
 //                              Users open the .app once; Safari then lists the
@@ -35,13 +35,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const safariDir = join(root, 'safari');
-const project = join(safariDir, 'DuoTranslator.xcodeproj');
+const project = join(safariDir, 'Fluento.xcodeproj');
 const pbxproj = join(project, 'project.pbxproj');
 const resourcesDir = join(safariDir, 'Resources');
 const buildDir = join(safariDir, 'build');
-const scheme = 'DuoTranslator';
+const scheme = 'Fluento';
 // PRODUCT_NAME of the app target: the .app / .pkg file name users see.
-const appName = 'Duo Translator for Safari';
+const appName = 'Fluento for Safari';
 
 const [command = 'sync', ...flags] = process.argv.slice(2);
 const dev = flags.includes('--dev');
@@ -134,7 +134,7 @@ function build() {
 }
 
 function makeArchive() {
-    const archivePath = join(buildDir, 'DuoTranslator.xcarchive');
+    const archivePath = join(buildDir, 'Fluento.xcarchive');
     run('xcodebuild', [
         '-project', project, '-scheme', scheme, '-configuration', 'Release',
         '-destination', 'generic/platform=macOS',
@@ -172,14 +172,14 @@ function developerIdIdentity(app) {
 
 /** Developer ID build: notarized, stapled .dmg for distribution outside the store. */
 function dist({ version }) {
-    const profile = process.env.SAFARI_NOTARY_PROFILE || 'duo-translator';
+    const profile = process.env.SAFARI_NOTARY_PROFILE || 'fluento';
     const exportPath = join(buildDir, 'export-developer-id');
     exportArchive(makeArchive(), 'ExportOptionsDeveloperID.plist', exportPath);
     const app = join(exportPath, `${appName}.app`);
 
     // 1. Notarize + staple the .app itself, so it passes Gatekeeper even when
     //    someone copies it out of the dmg on a machine that is offline.
-    const appZip = join(buildDir, 'DuoTranslator-notarize.zip');
+    const appZip = join(buildDir, 'Fluento-notarize.zip');
     rmSync(appZip, { force: true });
     run('ditto', ['-c', '-k', '--keepParent', app, appZip]);
     run('xcrun', ['notarytool', 'submit', appZip, '--keychain-profile', profile, '--wait']);
@@ -193,7 +193,7 @@ function dist({ version }) {
     mkdirSync(distDir, { recursive: true });
     run('ditto', [app, join(stage, `${appName}.app`)]);
     symlinkSync('/Applications', join(stage, 'Applications'));
-    const dmg = join(distDir, `DuoTranslator-${version}-safari.dmg`);
+    const dmg = join(distDir, `Fluento-${version}-safari.dmg`);
     rmSync(dmg, { force: true });
     run('hdiutil', ['create', '-volname', appName, '-srcfolder', stage, '-ov', '-format', 'UDZO', dmg]);
     // The disk image needs its own Developer ID signature: notarization
@@ -215,7 +215,7 @@ function icon() {
     const bin = join(tmp, 'make-icon');
     run('swiftc', ['-O', swiftSource, '-o', bin]);
     const master = join(tmp, 'icon-1024.png');
-    run(bin, [join(root, 'public', 'DuoTranslator.svg'), master]);
+    run(bin, [join(root, 'public', 'Fluento.svg'), master]);
     const iconset = join(safariDir, 'App', 'Assets.xcassets', 'AppIcon.appiconset');
     for (const size of [16, 32, 64, 128, 256, 512, 1024]) {
         run('sips', ['-z', String(size), String(size), master, '--out', join(iconset, `icon_${size}.png`)], { stdio: 'ignore' });

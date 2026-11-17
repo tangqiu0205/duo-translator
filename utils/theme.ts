@@ -15,7 +15,7 @@ import { useConfig } from "@/utils/reactiveConfig";
  *
  * Styling contract: base design tokens are the DARK values; the light theme
  * is a token override block scoped to `[data-theme="light"]` (on <html> for
- * extension pages, on the `.duo-ai-root` mount for Shadow DOM surfaces).
+ * extension pages, on the `.fluento-ai-root` mount for Shadow DOM surfaces).
  * "system" resolves via prefers-color-scheme and re-resolves live on change.
  */
 
@@ -30,10 +30,10 @@ export const THEME_OPTIONS: { value: ThemeSetting; i18nKey: string; fallback: st
     { value: "dark", i18nKey: "themeDark", fallback: "Dark" },
 ];
 
-const THEME_STORAGE_KEY = `local:config_${CONFIG_KEY.THEME}` as StorageItemKey;
+const THEME_STORAGE_KEY = `local:fluento_config_${CONFIG_KEY.THEME}` as StorageItemKey;
 // localStorage mirror so extension pages can re-apply the last resolved theme
 // synchronously before the async storage read lands (no light→dark flash).
-const THEME_CACHE_KEY = "duoResolvedTheme";
+const THEME_CACHE_KEY = "fluentoResolvedTheme";
 
 function prefersLightQuery(): MediaQueryList {
     return window.matchMedia("(prefers-color-scheme: light)");
@@ -96,7 +96,7 @@ export function watchResolvedTheme(cb: (theme: ResolvedTheme) => void): () => vo
 /**
  * Keep `data-theme` on an element in sync with the resolved theme. Used for
  * the mount root of each Shadow DOM surface; the light token override block
- * in aiWriting.css is scoped to `.duo-ai-root[data-theme="light"]`.
+ * in aiWriting.css is scoped to `.fluento-ai-root[data-theme="light"]`.
  */
 export function bindThemeToElement(el: HTMLElement): () => void {
     return watchResolvedTheme((theme) => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeftRight, Check, ChevronDown, ChevronRight, Copy, FileText, Loader2, Maximize2, Minimize2, Send, Square, Volume2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { AI_PREFIX, LANGUAGES } from '@/main/constants';
+import { AI_PREFIX, LANGUAGES, TRANSLATE_SERVICES } from '@/main/constants';
 import { isDoubaoService } from '@/main/publicTranslationConfig';
 import { translateTexts } from '@/main/translateClient';
 import { useTts } from '@/main/aiWriting/useTts';
@@ -139,7 +139,7 @@ export function ManualTranslator({ services, defaultService, embedded = false, o
       const sourceLang = draft.source === 'auto' ? answer.sourceLang : draft.source;
       setDraft((current) => ({ ...current, result: {
         text: readManualText(draft.service, answer.translatedMappedHtmlText),
-        original: draft.text, sourceLang: sourceLang || '', targetLang: draft.target, service: draft.service,
+        original: draft.text, sourceLang: sourceLang || '', targetLang: draft.target, service: draft.service, actualService: answer.actualService,
       } }));
       // Unknown source languages leave original speech disabled; never send
       // the user's text to a second provider just to enable that button.
@@ -251,6 +251,7 @@ export function ManualTranslator({ services, defaultService, embedded = false, o
               <button type="button" className={toolClass} aria-expanded={expanded} aria-label={t(expanded ? 'popupCollapseResult' : 'popupExpandResult', expanded ? 'Collapse translation' : 'Expand translation')} onClick={() => setExpanded((value) => !value)}>{expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
             </div>
           </div>
+          {draft.result.actualService && <p className="mb-1 text-[10px] text-ink-mute">{t('freeTranslationUsed', 'Service')}: {t(TRANSLATE_SERVICES.get(draft.result.actualService)?.title || draft.result.actualService, draft.result.actualService)}</p>}
           <div role="status" aria-live="polite" tabIndex={0} className={cn('overflow-y-auto whitespace-pre-wrap break-words text-[14px] leading-[1.6] outline-accent', expanded ? 'max-h-64' : 'max-h-36')}>{draft.result.text}</div>
           <div className="mt-2 border-t border-line pt-1.5">
             <div className="flex items-center justify-between">

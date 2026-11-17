@@ -1,6 +1,6 @@
 //
 //  SafariWebExtensionHandler.swift
-//  DuoTranslator Extension
+//  Fluento Extension
 //
 //  Required principal class for a Safari web extension. The extension never
 //  calls browser.runtime.sendNativeMessage, so this only acknowledges

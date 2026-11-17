@@ -64,7 +64,7 @@ import {
 import { compileSelectorList } from "@/main/siteRules/selectors";
 import { EMPTY_CANDIDATES, EMPTY_COMPILED, type CompiledSiteRules, type SiteRuleCandidates } from "@/main/siteRules/types";
 import { isEditable, isNotMarkElement, isNotTranslateElement, isOwnNoTranslateElement } from "@/main/dom/predicates";
-import { getTextNodesAndText, getTextNodesAndTextOfNodes, isContainsValidTextElement, removeDuoClassAndAttribute, removeTextNodes } from "@/main/dom/textNodes";
+import { getTextNodesAndText, getTextNodesAndTextOfNodes, isContainsValidTextElement, removeFluentoClassAndAttribute, removeTextNodes } from "@/main/dom/textNodes";
 import {
     allParagraphs,
     clearParagraphMarks,
@@ -631,10 +631,10 @@ export async function content() {
     // sweepDetachedBookkeeping sweeps by `key.isConnected`, ignoreMutation
     // walks real nodes, IntersectionObserver takes elements, and the highlight
     // binding is one-per-container by design.
-    interface DuoUnitRecord {
+    interface BilingualUnitRecord {
         /** Exclusive anchors captured before our nodes were inserted. */
         range: UnitRange
-        /** The inserted `.duo-translation` and its `.duo-divide` separator. */
+        /** The inserted `.fluento-translation` and its `.fluento-divide` separator. */
         translation: HTMLElement
         divide: HTMLElement
         /**
@@ -644,7 +644,7 @@ export async function content() {
          */
         sentences: { original: Range[], translation: Range[] } | null
         /**
-         * Bilingual highlighting, <duo-span> fallback path: the original text
+         * Bilingual highlighting, <fluento-span> fallback path: the original text
          * captured before wrapping emptied those nodes, replayed on restore.
          * Empty on the Highlight-API path, which never touches the text.
          */
@@ -659,10 +659,10 @@ export async function content() {
          */
         covered: Text[]
     }
-    let duoTranslatedElementMap = new Map<UnitContainer, DuoUnitRecord[]>()
+    let bilingualTranslatedElementMap = new Map<UnitContainer, BilingualUnitRecord[]>()
 
     /** The bookkeeping a re-translation of a unit supersedes, per view. */
-    type UnitReplacement = { duo?: DuoUnitRecord, single?: TranslateResult }
+    type UnitReplacement = { bilingual?: BilingualUnitRecord, single?: TranslateResult }
 
     /**
      * What this unit needs: a first translation, nothing, or a re-translation
@@ -673,9 +673,9 @@ export async function content() {
      * answer this on its own.
      */
     function planUnit(unit: TranslationUnit) {
-        return planUnitCoverage<DuoUnitRecord, TranslateResult>(
+        return planUnitCoverage<BilingualUnitRecord, TranslateResult>(
             unit,
-            duoTranslatedElementMap.get(unit.container),
+            bilingualTranslatedElementMap.get(unit.container),
             translatedElementMap.get(unit.container),
         )
     }
@@ -701,9 +701,9 @@ export async function content() {
         // container's units, so unwrapping now would strip the highlighting off
         // a translation that is not being replaced after all.
         if (!ignoreMutationElements.has(container)
-            && plans.some(p => p.action === "replace" && (p.duo?.texts.length ?? 0) > 0)) {
+            && plans.some(p => p.action === "replace" && (p.bilingual?.texts.length ?? 0) > 0)) {
             for (const plan of plans) {
-                if (plan.action === "replace" && plan.duo) unwrapHighlightSpans(container, plan.duo)
+                if (plan.action === "replace" && plan.bilingual) unwrapHighlightSpans(container, plan.bilingual)
             }
             seg = segmentParagraph(container)
             plans = seg.units.map(planUnit)
@@ -718,19 +718,19 @@ export async function content() {
      */
     type UnitTarget =
         | { container: UnitContainer, kind: "unit", range: UnitRange, unit: TranslationUnit }
-        | { container: UnitContainer, kind: "duo", range: UnitRange, record: DuoUnitRecord }
+        | { container: UnitContainer, kind: "bilingual", range: UnitRange, record: BilingualUnitRecord }
         | { container: UnitContainer, kind: "single", range: UnitRange, result: TranslateResult }
     // per-paragraph disposers for the delegated bilingual-highlight listeners;
     // WeakMap so paragraphs removed by the page don't pin the closures
     const highlightDisposers = new WeakMap<UnitContainer, () => void>()
     // Which bilingual-highlight strategy this frame uses: the CSS Custom
-    // Highlight API where available, the <duo-span> wrapper otherwise. Resolved
+    // Highlight API where available, the <fluento-span> wrapper otherwise. Resolved
     // once so a record's write path and its restore path can never disagree.
     const highlightApiSupported = supportsHighlightApi()
     // Is the translation currently rendered blurred (STYLE_BLUR)? Kept in sync
     // by updateStyle. The bilingual-highlight handlers read it: a blurred
     // translation is only legible while the pointer rests on it (the blur is
-    // lifted by `.duo-translation:hover`), so a hover over the ORIGINAL must
+    // lifted by `.fluento-translation:hover`), so a hover over the ORIGINAL must
     // paint nothing at all — half the pair would be unreadable.
     let translationBlurred = false
     // translated elements of SINGLE view strategy
@@ -887,7 +887,7 @@ export async function content() {
 
                 let text = target.textContent
 
-                let translateStatus = duoTranslatedElementMap.has(p) || translatedElementMap.has(p)
+                let translateStatus = bilingualTranslatedElementMap.has(p) || translatedElementMap.has(p)
                 restoreOriginalParagraphElement(p).then(() => {
                     // probably get old original text
                     if (target.textContent != text) {
@@ -1632,7 +1632,7 @@ export async function content() {
      * Already-translated candidates come first so a pointer over translated text
      * toggles it off rather than re-translating it (in SINGLE the same unit
      * appears in both lists — `unit.translated` is DOUBLE-only, derived from the
-     * adjacent .duo-translation).
+     * adjacent .fluento-translation).
      *
      * Returns null when the pointer is over no unit's text (container padding,
      * the blank space past a short line): callers then fall back to whole-
@@ -1646,8 +1646,8 @@ export async function content() {
         if (!container) return null
 
         const candidates: UnitTarget[] = []
-        for (const record of duoTranslatedElementMap.get(container) ?? []) {
-            candidates.push({ container, kind: "duo", range: record.range, record })
+        for (const record of bilingualTranslatedElementMap.get(container) ?? []) {
+            candidates.push({ container, kind: "bilingual", range: record.range, record })
         }
         for (const result of translatedElementMap.get(container) ?? []) {
             candidates.push({
@@ -1682,8 +1682,8 @@ export async function content() {
     function revalidateUnitTarget(target: UnitTarget): UnitTarget | null {
         if (!target.container.isConnected) return null
         switch (target.kind) {
-            case "duo":
-                return duoTranslatedElementMap.get(target.container)?.includes(target.record)
+            case "bilingual":
+                return bilingualTranslatedElementMap.get(target.container)?.includes(target.record)
                     ? target : null
             case "single":
                 return translatedElementMap.get(target.container)?.includes(target.result)
@@ -1711,8 +1711,8 @@ export async function content() {
                 // own label so the bubble matches what the user just did.
                 translateUnits([target.unit], undefined, ERROR_SCOPE.PARAGRAPH_TRANSLATE)
                 break
-            case "duo":
-                restoreDuoRecords(target.container, [target.record])
+            case "bilingual":
+                restoreBilingualRecords(target.container, [target.record])
                 break
             case "single":
                 restoreSingleResults(target.container, [target.result])
@@ -1722,7 +1722,7 @@ export async function content() {
 
     /** Whole-container fallback — the behavior before per-unit targeting. */
     function toggleTranslateContainer(container: UnitContainer) {
-        const translated = duoTranslatedElementMap.has(container) || translatedElementMap.has(container)
+        const translated = bilingualTranslatedElementMap.has(container) || translatedElementMap.has(container)
         if (translated) {
             restoreOriginalParagraphElement(container)
         } else {
@@ -1919,7 +1919,7 @@ export async function content() {
                         // the bookkeeping holds a handful of containers, while
                         // `collected` can be the whole page.
                         const stale = collected.filter(
-                            el => duoTranslatedElementMap.has(el) || translatedElementMap.has(el)
+                            el => bilingualTranslatedElementMap.has(el) || translatedElementMap.has(el)
                         )
                         if (stale.length > 0) trackParagraphTranslation(stale, true)
                         continue
@@ -1966,7 +1966,7 @@ export async function content() {
         // own have to be released whether or not the tree held any marks.
         forgetDisconnectedRoots();
         const drop = (el: UnitContainer) => {
-            duoTranslatedElementMap.delete(el);
+            bilingualTranslatedElementMap.delete(el);
             translatedElementMap.delete(el);
             paragraphElementMap.delete(el);
             // The listeners went with the detached node, but the highlight paint
@@ -1979,7 +1979,7 @@ export async function content() {
         // loop above covers them in practice — sweep them anyway rather than
         // depend on that, since a stranded record makes its container read as
         // "already translated" forever.
-        for (const el of duoTranslatedElementMap.keys()) if (!el.isConnected) drop(el);
+        for (const el of bilingualTranslatedElementMap.keys()) if (!el.isConnected) drop(el);
         for (const el of translatedElementMap.keys()) if (!el.isConnected) drop(el);
     }
 
@@ -2255,7 +2255,7 @@ export async function content() {
         let ruleModeStyle = document.createElement('style') as HTMLStyleElement
         ruleModeStyle.id = "rule-mode-style"
         // The selected-region indicator is drawn by ruleMode's overlay (yellow
-        // boxes), not a `.duo-selected` outline — an outline here would be clipped
+        // boxes), not a `.fluento-selected` outline — an outline here would be clipped
         // by the page's `overflow:hidden` ancestors just like the hover highlight.
         document.head.appendChild(ruleModeStyle)
         await updateStyle()
@@ -2302,7 +2302,7 @@ export async function content() {
      * translate (including ones the domain strategy says NEVER to translate).
      */
     function syncSiteRuleCss(pageTranslated: boolean = translateStatus) {
-        if (pageTranslated || duoTranslatedElementMap.size > 0 || translatedElementMap.size > 0) {
+        if (pageTranslated || bilingualTranslatedElementMap.size > 0 || translatedElementMap.size > 0) {
             applySiteRuleCss()
         } else {
             removeSiteRuleCss()
@@ -2318,7 +2318,7 @@ export async function content() {
         if (!siteRuleStyleSheet && !siteRuleStyleElement) {
             if (import.meta.env.FIREFOX) {
                 siteRuleStyleElement = document.createElement('style')
-                siteRuleStyleElement.id = 'duo-site-rule-style'
+                siteRuleStyleElement.id = 'fluento-site-rule-style'
                 document.head.appendChild(siteRuleStyleElement)
             } else {
                 siteRuleStyleSheet = new CSSStyleSheet()
@@ -2426,8 +2426,8 @@ export async function content() {
             translationStyleElement.remove()
             translationStyleElement = null
         }
-        // Legacy cleanup — earlier versions used a <style id="duo-translation-style">.
-        document.getElementById('duo-translation-style')?.remove()
+        // Legacy cleanup — earlier versions used a <style id="fluento-translation-style">.
+        document.getElementById('fluento-translation-style')?.remove()
         removeShadowCss("translation")
     }
 
@@ -2786,21 +2786,21 @@ export async function content() {
     }
 
     /**
-     * Remove the highlight `duo-span`s inside `nodes` that belong to
+     * Remove the highlight `fluento-span`s inside `nodes` that belong to
      * `container` (fallback path only). A mixed container's nested marked
      * paragraphs (an `<li>`) own their spans and restore them through their own
      * bookkeeping, so they must be left alone — hence the closestParagraph
      * ownership filter.
      */
-    function removeDuoSpansIn(container: UnitContainer, nodes: ChildNode[]) {
+    function removeFluentoSpansIn(container: UnitContainer, nodes: ChildNode[]) {
         for (const node of nodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue
             const el = node as HTMLElement
-            if (el.tagName === "DUO-SPAN") {
+            if (el.tagName === "FLUENTO-SPAN") {
                 el.remove()
                 continue
             }
-            for (const span of el.querySelectorAll("duo-span")) {
+            for (const span of el.querySelectorAll("fluento-span")) {
                 if (closestParagraph(span) === container) span.remove()
             }
         }
@@ -2812,11 +2812,11 @@ export async function content() {
      * which leaves the container's other translated units untouched.
      *
      * Both highlight strategies are undone here, keyed off the record itself:
-     * `texts` is non-empty only for the <duo-span> fallback, which is the only
+     * `texts` is non-empty only for the <fluento-span> fallback, which is the only
      * one that modified the page's own text.
      */
-    function restoreDuoRecords(element: UnitContainer, records: DuoUnitRecord[]) {
-        const all = duoTranslatedElementMap.get(element) ?? []
+    function restoreBilingualRecords(element: UnitContainer, records: BilingualUnitRecord[]) {
+        const all = bilingualTranslatedElementMap.get(element) ?? []
         const remaining = all.filter(r => !records.includes(r))
         ignoreMutationElements.add(element)
         // The painted sentence may belong to a record we are dropping, and its
@@ -2836,18 +2836,18 @@ export async function content() {
                 // Our inserted nodes are known exactly; the unit's range scopes
                 // the span sweep so sibling units keep theirs.
                 if (record.texts.length > 0) {
-                    removeDuoSpansIn(element, nodesInRange(element, record.range))
+                    removeFluentoSpansIn(element, nodesInRange(element, record.range))
                 }
             }
             if (remaining.length === 0) {
                 // Full restore: also sweep anything left over that no record
                 // accounts for (a translation inserted by a round whose
                 // bookkeeping was dropped by a re-scan).
-                for (const node of element.querySelectorAll(".duo-translation, .duo-divide")) {
+                for (const node of element.querySelectorAll(".fluento-translation, .fluento-divide")) {
                     if (closestParagraph(node) === element) node.remove()
                 }
                 if (!highlightApiSupported) {
-                    removeDuoSpansIn(element, Array.from(element.childNodes))
+                    removeFluentoSpansIn(element, Array.from(element.childNodes))
                 }
             }
         } catch (e) {
@@ -2868,9 +2868,9 @@ export async function content() {
                 })
             }
             if (remaining.length > 0) {
-                duoTranslatedElementMap.set(element, remaining)
+                bilingualTranslatedElementMap.set(element, remaining)
             } else {
-                duoTranslatedElementMap.delete(element)
+                bilingualTranslatedElementMap.delete(element)
             }
             // Inside the microtask: the map delete above is what makes the last
             // translation "gone", so this has to run after it.
@@ -2879,12 +2879,12 @@ export async function content() {
     }
 
     /**
-     * <duo-span> highlight fallback only: give the run its own text back and
+     * <fluento-span> highlight fallback only: give the run its own text back and
      * drop our wrappers, leaving the translation itself on screen.
      *
      * A unit about to be re-translated is serialized straight from the page,
      * and on this path the page's own text nodes are empty — the text lives in
-     * our wrappers. Serializing that would ship `<duo-span duo-sequence>`
+     * our wrappers. Serializing that would ship `<fluento-span fluento-sequence>`
      * scaffolding to the provider and clone it into the new translation.
      *
      * Only the wrapping is undone here, not the translation: taking that down
@@ -2892,7 +2892,7 @@ export async function content() {
      * is built to avoid. It comes down in the insert loop, with its successor
      * in hand.
      */
-    function unwrapHighlightSpans(element: UnitContainer, record: DuoUnitRecord) {
+    function unwrapHighlightSpans(element: UnitContainer, record: BilingualUnitRecord) {
         if (record.texts.length === 0) return
         const texts = record.texts
         record.texts = []
@@ -2900,7 +2900,7 @@ export async function content() {
         // The painted sentence is anchored in nodes we are about to empty.
         clearSentenceHighlight(element)
         try {
-            removeDuoSpansIn(element, nodesInRange(element, record.range))
+            removeFluentoSpansIn(element, nodesInRange(element, record.range))
         } catch (e) {
             console.error(APP_NAME_WITH_SUFFIX, "unwrap highlight spans error:", e)
         }
@@ -2919,10 +2919,10 @@ export async function content() {
      * successor is ready to go in.
      *
      * `records` is the container's live array (the very object in
-     * duoTranslatedElementMap when there is one), so the splice IS the
+     * bilingualTranslatedElementMap when there is one), so the splice IS the
      * bookkeeping update.
      */
-    function dropDuoRecord(element: UnitContainer, records: DuoUnitRecord[], record: DuoUnitRecord) {
+    function dropBilingualRecord(element: UnitContainer, records: BilingualUnitRecord[], record: BilingualUnitRecord) {
         clearSentenceHighlight(element)
         record.divide.remove()
         record.translation.remove()
@@ -2932,7 +2932,7 @@ export async function content() {
 
     /**
      * SINGLE: replay the original text of `results` (one per unit). Same
-     * split as restoreDuoRecords — all of them, or just the hovered unit's.
+     * split as restoreBilingualRecords — all of them, or just the hovered unit's.
      */
     async function restoreSingleResults(element: UnitContainer, results: TranslateResult[]) {
         const all = translatedElementMap.get(element) ?? []
@@ -2957,9 +2957,9 @@ export async function content() {
     }
 
     async function restoreOriginalParagraphElement(element: UnitContainer) {
-        const records = duoTranslatedElementMap.get(element)
+        const records = bilingualTranslatedElementMap.get(element)
         if (records) {
-            restoreDuoRecords(element, [...records])
+            restoreBilingualRecords(element, [...records])
             return
         }
         const results = translatedElementMap.get(element)
@@ -2981,16 +2981,16 @@ export async function content() {
         // belongs to would be pointing at nothing.
         clearTranslateIndicators()
 
-        if (duoTranslatedElementMap.size > 0) {
+        if (bilingualTranslatedElementMap.size > 0) {
             // Every container, every record — same code path as the per-unit
             // toggle, so the two can't drift. Each call defers its ignore-mark
             // cleanup and its map delete to a microtask that runs after the
             // observer's, exactly as the single batched version used to.
-            for (const [element, records] of Array.from(duoTranslatedElementMap)) {
+            for (const [element, records] of Array.from(bilingualTranslatedElementMap)) {
                 if (!element) {
                     continue
                 }
-                restoreDuoRecords(element, [...records])
+                restoreBilingualRecords(element, [...records])
             }
         }
         if (translatedElementMap.size > 0) {
@@ -3017,16 +3017,16 @@ export async function content() {
             })
         }
         if (pure) {
-            // Strip leftover duo-* attributes/classes from marked paragraphs
+            // Strip leftover fluento-* attributes/classes from marked paragraphs
             // BEFORE dropping the marks — the marks map is the only index left.
             allParagraphs().forEach(element => {
                 // A ShadowRoot container carries no attributes of its own.
-                if (!isShadowRoot(element)) removeDuoClassAndAttribute(element)
+                if (!isShadowRoot(element)) removeFluentoClassAndAttribute(element)
             })
             clearParagraphMarks()
             resetNoTranslateMarks()
         }
-        // console.debug('restore original page', duoTranslatedElementMap)
+        // console.debug('restore original page', bilingualTranslatedElementMap)
     }
 
     async function setSessionStorage(key: string, value: any) {
@@ -3099,7 +3099,7 @@ export async function content() {
         if (!translationStyleSheet && !translationStyleElement) {
             if (import.meta.env.FIREFOX) {
                 translationStyleElement = document.createElement('style')
-                translationStyleElement.id = 'duo-translation-style'
+                translationStyleElement.id = 'fluento-translation-style'
                 document.head.appendChild(translationStyleElement)
             } else {
                 translationStyleSheet = new CSSStyleSheet()
@@ -3146,7 +3146,7 @@ export async function content() {
     // Async + iterative to avoid blocking the main thread on large subtrees.
     // The walk yields to the browser every MARK_BUDGET_MS so a body-sized
     // input still mark-completes without freezing the page. Behaviour matches
-    // the previous recursive version (depth limit, text-node→duo-span wrapping,
+    // the previous recursive version (depth limit, text-node→fluento-span wrapping,
     // mutation suppression around our own DOM writes).
     async function markParagraphElement(
         element: UnitContainer,
@@ -3402,7 +3402,7 @@ export async function content() {
     // layout is clean, so every getClientRects after the first in a frame is a
     // lookup rather than a reflow.
     function bindRangeHighlightHandler(container: UnitContainer): () => void {
-        let current: { record: DuoUnitRecord, index: number } | null = null
+        let current: { record: BilingualUnitRecord, index: number } | null = null
         let frame = 0
         let pointerX = 0
         let pointerY = 0
@@ -3415,7 +3415,7 @@ export async function content() {
         let pointerInTranslation = false
 
         /** Is the pointer over sentence `index` of `record`, on either side? */
-        function hits(record: DuoUnitRecord, index: number): boolean {
+        function hits(record: BilingualUnitRecord, index: number): boolean {
             const pair = record.sentences
             if (!pair) return false
             const original = pair.original[index]
@@ -3433,7 +3433,7 @@ export async function content() {
 
         function resolve() {
             frame = 0
-            const records = duoTranslatedElementMap.get(container) ?? []
+            const records = bilingualTranslatedElementMap.get(container) ?? []
             // The record may have been restored away under us.
             if (current && !records.includes(current.record)) current = null
             // Blurred: leaving the translation for the original re-blurs it, so
@@ -3473,7 +3473,7 @@ export async function content() {
             // the container sees `target` retargeted to the host for anything
             // inside a nested shadow root.
             if (translationBlurred) {
-                pointerInTranslation = !!composedTarget(event)?.closest?.(".duo-translation")
+                pointerInTranslation = !!composedTarget(event)?.closest?.(".fluento-translation")
             }
             if (frame) return
             frame = requestAnimationFrame(resolve)
@@ -3505,10 +3505,10 @@ export async function content() {
     }
 
     // Fallback strategy for browsers without the Highlight API: each sentence is
-    // a <duo-span duo-sequence="i">, so the pointer is resolved by element
+    // a <fluento-span fluento-sequence="i">, so the pointer is resolved by element
     // identity (mouseover, no geometry) and painted with a class.
     //
-    // duo-sequence numbers are unique within one container (units of the same
+    // fluento-sequence numbers are unique within one container (units of the same
     // container share a running offset), so a single delegated binding per
     // container pairs both sides. Ownership is resolved via closestParagraph so
     // spans of nested marked paragraphs (an <li> inside a mixed container — they
@@ -3518,13 +3518,13 @@ export async function content() {
         let currentSequence: number | null = null
 
         function applyHighlight(sequence: number, add: boolean) {
-            let sequenceElements = originalElement.querySelectorAll('duo-span[duo-sequence="' + sequence + '"]')
+            let sequenceElements = originalElement.querySelectorAll('fluento-span[fluento-sequence="' + sequence + '"]')
             for (let sequenceElement of sequenceElements) {
                 if (closestParagraph(sequenceElement) !== originalElement) continue
-                if (sequenceElement.closest('.duo-translation')) {
-                    sequenceElement.classList.toggle("duo-highlight-translation", add)
+                if (sequenceElement.closest('.fluento-translation')) {
+                    sequenceElement.classList.toggle("fluento-highlight-translation", add)
                 } else {
-                    sequenceElement.classList.toggle("duo-highlight-original", add)
+                    sequenceElement.classList.toggle("fluento-highlight-original", add)
                 }
             }
         }
@@ -3533,7 +3533,7 @@ export async function content() {
             // composedTarget: for a listener bound on the container, `target` is
             // retargeted to the host whenever the span lives in a nested root.
             const target = composedTarget(event)
-            const span = target?.closest?.('duo-span[duo-sequence]')
+            const span = target?.closest?.('fluento-span[fluento-sequence]')
             // No span under the pointer (blank area) → keep the current highlight.
             // The ownership guard protects against spans of an enclosing or
             // nested paragraph (each has its own binding).
@@ -3543,12 +3543,12 @@ export async function content() {
             // Same rule as the Highlight-API path: with the translation blurred,
             // only the translation side may select a sentence, and moving onto
             // the original drops the paint (it re-blurs as soon as
-            // `.duo-translation:hover` stops matching).
-            if (translationBlurred && !span.closest('.duo-translation')) {
+            // `.fluento-translation:hover` stops matching).
+            if (translationBlurred && !span.closest('.fluento-translation')) {
                 onMouseLeave()
                 return
             }
-            const sequence = parseInt(span.getAttribute("duo-sequence")!)
+            const sequence = parseInt(span.getAttribute("fluento-sequence")!)
             if (isNaN(sequence) || sequence === currentSequence) {
                 return
             }
@@ -3621,7 +3621,7 @@ export async function content() {
                 pending++
                 units.push(unit)
                 if (plan.action === "replace") {
-                    replacements.set(unit, { duo: plan.duo, single: plan.single })
+                    replacements.set(unit, { bilingual: plan.bilingual, single: plan.single })
                 }
             }
             // Nothing to settle in repair mode: these containers were never put
@@ -3679,7 +3679,7 @@ export async function content() {
                     // The page grew this unit while the failed batch was out —
                     // the retry has to supersede, not append.
                     if (plan.action === "replace") {
-                        replacements.set(unit, { duo: plan.duo, single: plan.single })
+                        replacements.set(unit, { bilingual: plan.bilingual, single: plan.single })
                     }
                 }
                 break
@@ -3954,18 +3954,18 @@ export async function content() {
                 for (const [element, containerResults] of resultsByContainer) {
                     // Records of units translated in earlier rounds are kept —
                     // this round appends, never overwrites.
-                    const records: DuoUnitRecord[] = duoTranslatedElementMap.get(element) ?? []
+                    const records: BilingualUnitRecord[] = bilingualTranslatedElementMap.get(element) ?? []
                     let insertedAny = false
                     let highlightedAny = false
-                    // Fallback path only: duo-sequence must stay unique within
+                    // Fallback path only: fluento-sequence must stay unique within
                     // the container, so continue numbering after the spans of
                     // earlier rounds. (The Highlight-API path pairs by array
                     // index inside each record and needs no shared counter.)
                     let sequenceOffset = 0
                     if (!highlightApiSupported) {
-                        for (const span of element.querySelectorAll('duo-span[duo-sequence]')) {
+                        for (const span of element.querySelectorAll('fluento-span[fluento-sequence]')) {
                             if (closestParagraph(span) !== element) continue
-                            const seq = parseInt(span.getAttribute('duo-sequence')!)
+                            const seq = parseInt(span.getAttribute('fluento-sequence')!)
                             if (!isNaN(seq) && seq >= sequenceOffset) sequenceOffset = seq + 1
                         }
                     }
@@ -3988,13 +3988,13 @@ export async function content() {
                         // the page never shows the untranslated original in
                         // between. Before the `next` probe, which would
                         // otherwise read the old pair as "already translated".
-                        const superseded = replacements?.get(unit)?.duo
-                        if (superseded) dropDuoRecord(element, records, superseded)
+                        const superseded = replacements?.get(unit)?.bilingual
+                        if (superseded) dropBilingualRecord(element, records, superseded)
                         // Already carries a translation (concurrent round) — skip.
                         // Stepping over our own translating indicator, which is
                         // sitting exactly here while this batch is in flight.
                         const next = siblingSkippingIndicators(lastChild.nextSibling, "next") as HTMLElement | null
-                        if (next?.classList?.contains("duo-divide") || next?.classList?.contains("duo-translation")) continue
+                        if (next?.classList?.contains("fluento-divide") || next?.classList?.contains("fluento-translation")) continue
 
                         // Capture the unit's anchors BEFORE inserting our nodes,
                         // so the record's range brackets the unit (and the
@@ -4002,7 +4002,7 @@ export async function content() {
                         const range = unitRangeOf(unit)
                         const originalTextResult = getTextNodesAndTextOfNodes(unit.nodes)
                         if (!highlightApiSupported) {
-                            // Only the <duo-span> fallback rewrites these nodes;
+                            // Only the <fluento-span> fallback rewrites these nodes;
                             // the Highlight-API path is read-only, so it needs no
                             // mutation guard on them.
                             originalTextResult.textNodes.forEach(textNode => {
@@ -4010,14 +4010,14 @@ export async function content() {
                                 ignoreMutationElements.add(textNode)
                             })
                         }
-                        translatedElement.classList.add("duo-translation")
+                        translatedElement.classList.add("fluento-translation")
                         let divide: HTMLElement
                         if (originalTextResult.text.length >= translationLineBreakMinChars) {
                             divide = document.createElement('br')
-                            divide.classList.add("duo-divide")
+                            divide.classList.add("fluento-divide")
                         } else {
                             divide = document.createElement('span')
-                            divide.classList.add("duo-divide")
+                            divide.classList.add("fluento-divide")
                             divide.innerHTML = '&nbsp;&nbsp;'
                         }
                         if (lastChild.nextSibling) {
@@ -4028,7 +4028,7 @@ export async function content() {
                             element.appendChild(translatedElement)
                         }
                         insertedAny = true
-                        const record: DuoUnitRecord = {
+                        const record: BilingualUnitRecord = {
                             range, translation: translatedElement, divide, sentences: null, texts: [],
                             // Captured above, before anything was inserted — the
                             // run's own source nodes, which is what makes this
@@ -4089,14 +4089,14 @@ export async function content() {
                         }
                     }
                     if (insertedAny) {
-                        duoTranslatedElementMap.set(element, records)
+                        bilingualTranslatedElementMap.set(element, records)
                         translatedContainers.add(element)
                     } else if (records.length === 0) {
                         // Every record was superseded and none of the successors
                         // made it in (detached nodes, a dropped echo). Leaving an
                         // empty array behind would read as "this container is
                         // translated" to everything that only asks `has`.
-                        duoTranslatedElementMap.delete(element)
+                        bilingualTranslatedElementMap.delete(element)
                         highlightDisposers.get(element)?.()
                         highlightDisposers.delete(element)
                     }

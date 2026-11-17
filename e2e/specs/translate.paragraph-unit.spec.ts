@@ -14,11 +14,11 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
         // 'never': nothing is auto-translated, so every translation on the page
         // is one this test asked for.
         await seedConfig({
-            config_defaultStrategy: 'never',
-            config_doubleTapModifier: 'ctrl',
-            config_doubleTapToggleParagraph: true,
-            config_doubleTapTranslateSelection: false,
-            config_doubleTapTranslateInput: false,
+            fluento_config_defaultStrategy: 'never',
+            fluento_config_doubleTapModifier: 'ctrl',
+            fluento_config_doubleTapToggleParagraph: true,
+            fluento_config_doubleTapTranslateSelection: false,
+            fluento_config_doubleTapTranslateInput: false,
         });
     });
 
@@ -40,37 +40,37 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
     test('translates only the hovered unit, and toggling off removes only that one', async ({ page }) => {
         await page.goto('/segments.html');
         // Nothing auto-translated with strategy "never".
-        await expect(page.locator('.duo-translation')).toHaveCount(0);
+        await expect(page.locator('.fluento-translation')).toHaveCount(0);
 
         // Point at the FIRST unit of the two-unit container.
         await doubleTapOver(page, '#brsplit', 'first');
-        await expect(page.locator('#brsplit > .duo-translation')).toHaveCount(1);
-        const only = page.locator('#brsplit > .duo-translation');
+        await expect(page.locator('#brsplit > .fluento-translation')).toHaveCount(1);
+        const only = page.locator('#brsplit > .fluento-translation');
         await expect(only).toContainText(ZH);
         await expect(only).toContainText('First visual');
         await expect(only).not.toContainText('Second visual');
         // Nothing else on the page was touched.
-        await expect(page.locator('.duo-translation')).toHaveCount(1);
+        await expect(page.locator('.fluento-translation')).toHaveCount(1);
 
         // Now the SECOND unit: both are translated, each next to its own run.
         await doubleTapOver(page, '#brsplit', 'last');
-        await expect(page.locator('#brsplit > .duo-translation')).toHaveCount(2);
-        await expect(page.locator('#brsplit > .duo-translation').last()).toContainText('Second visual');
+        await expect(page.locator('#brsplit > .fluento-translation')).toHaveCount(2);
+        await expect(page.locator('#brsplit > .fluento-translation').last()).toContainText('Second visual');
 
         // Toggle the FIRST unit back off — the second one survives.
         await doubleTapOver(page, '#brsplit', 'first');
-        await expect(page.locator('#brsplit > .duo-translation')).toHaveCount(1);
-        await expect(page.locator('#brsplit > .duo-translation')).toContainText('Second visual');
+        await expect(page.locator('#brsplit > .fluento-translation')).toHaveCount(1);
+        await expect(page.locator('#brsplit > .fluento-translation')).toContainText('Second visual');
         await expect(page.locator('#brsplit')).toContainText('First visual paragraph before the double break.');
     });
 
     test('double-tapping over the translation toggles the same unit off', async ({ page }) => {
         await page.goto('/segments.html');
         await doubleTapOver(page, '#brsplit', 'first');
-        await expect(page.locator('#brsplit > .duo-translation')).toHaveCount(1);
+        await expect(page.locator('#brsplit > .fluento-translation')).toHaveCount(1);
 
-        await doubleTapOver(page, '#brsplit > .duo-translation');
-        await expect(page.locator('#brsplit > .duo-translation')).toHaveCount(0);
+        await doubleTapOver(page, '#brsplit > .fluento-translation');
+        await expect(page.locator('#brsplit > .fluento-translation')).toHaveCount(0);
         await expect(page.locator('#brsplit')).toContainText('First visual paragraph before the double break.');
         await expect(page.locator('#brsplit')).toContainText('Second visual paragraph after the double break.');
     });
@@ -79,12 +79,12 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
         await page.goto('/segments.html');
 
         await doubleTapOver(page, '#softbr');
-        await expect(page.locator('#softbr > .duo-translation')).toHaveCount(1);
-        await expect(page.locator('#softbr > .duo-translation')).toContainText('line one');
-        await expect(page.locator('#softbr > .duo-translation')).toContainText('line two');
+        await expect(page.locator('#softbr > .fluento-translation')).toHaveCount(1);
+        await expect(page.locator('#softbr > .fluento-translation')).toContainText('line one');
+        await expect(page.locator('#softbr > .fluento-translation')).toContainText('line two');
 
         await doubleTapOver(page, '#softbr');
-        await expect(page.locator('#softbr > .duo-translation')).toHaveCount(0);
+        await expect(page.locator('#softbr > .fluento-translation')).toHaveCount(0);
         await expect(page.locator('#softbr')).toContainText('Only line one here.');
     });
 
@@ -93,17 +93,17 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
 
         // The leading run of #mixed (text, then a <ul>, then trailing text).
         await doubleTapOver(page, '#mixed', 'first');
-        await expect(page.locator('#mixed > .duo-translation')).toHaveCount(1);
-        await expect(page.locator('#mixed > .duo-translation')).toContainText('Leading introduction');
+        await expect(page.locator('#mixed > .fluento-translation')).toHaveCount(1);
+        await expect(page.locator('#mixed > .fluento-translation')).toContainText('Leading introduction');
         // Neither the list items nor the trailing run were translated.
-        await expect(page.locator('#li1 .duo-translation')).toHaveCount(0);
-        await expect(page.locator('#li2 .duo-translation')).toHaveCount(0);
-        await expect(page.locator('.duo-translation')).toHaveCount(1);
+        await expect(page.locator('#li1 .fluento-translation')).toHaveCount(0);
+        await expect(page.locator('#li2 .fluento-translation')).toHaveCount(0);
+        await expect(page.locator('.fluento-translation')).toHaveCount(1);
 
         // A nested <li> is its own container: hovering it translates just it.
         await doubleTapOver(page, '#li1');
-        await expect(page.locator('#li1 .duo-translation')).toHaveCount(1);
-        await expect(page.locator('#li2 .duo-translation')).toHaveCount(0);
+        await expect(page.locator('#li1 .fluento-translation')).toHaveCount(1);
+        await expect(page.locator('#li2 .fluento-translation')).toHaveCount(0);
     });
 
     // A hand-translated paragraph has to stay in step with its source, the same
@@ -114,11 +114,11 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
         /** Translate #lonespan by hand and hand back its translation text. */
         async function translateLoneSpan(page: any) {
             await page.goto('/segments.html');
-            await expect(page.locator('.duo-translation')).toHaveCount(0);
+            await expect(page.locator('.fluento-translation')).toHaveCount(0);
             await doubleTapOver(page, '#lonespan');
-            await expect(page.locator('#lonespan > .duo-translation')).toContainText(ZH);
+            await expect(page.locator('#lonespan > .fluento-translation')).toContainText(ZH);
             await page.evaluate(() => {
-                document.querySelector('#lonespan > .duo-translation')!.setAttribute('data-e2e-stamp', 'v1');
+                document.querySelector('#lonespan > .fluento-translation')!.setAttribute('data-e2e-stamp', 'v1');
             });
         }
 
@@ -130,8 +130,8 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
                 (span.firstChild as Text).textContent = 'Completely different sentence now.';
             });
 
-            await expect(page.locator('#lonespan > .duo-translation')).toContainText('Completely different');
-            await expect(page.locator('#lonespan > .duo-translation')).toHaveCount(1);
+            await expect(page.locator('#lonespan > .fluento-translation')).toContainText('Completely different');
+            await expect(page.locator('#lonespan > .fluento-translation')).toHaveCount(1);
         });
 
         test('the page growing it re-translates the whole run', async ({ page }) => {
@@ -143,11 +143,11 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
                 document.querySelector('#lonespan')!.appendChild(extra);
             });
 
-            await expect(page.locator('#lonespan > .duo-translation')).toContainText('appended tail');
-            await expect(page.locator('#lonespan > .duo-translation')).toContainText('Wrapped in exactly one');
-            await expect(page.locator('#lonespan > .duo-translation')).toHaveCount(1);
+            await expect(page.locator('#lonespan > .fluento-translation')).toContainText('appended tail');
+            await expect(page.locator('#lonespan > .fluento-translation')).toContainText('Wrapped in exactly one');
+            await expect(page.locator('#lonespan > .fluento-translation')).toHaveCount(1);
             // Replaced, not appended to.
-            await expect(page.locator('#lonespan > .duo-translation')).not.toHaveAttribute('data-e2e-stamp', 'v1');
+            await expect(page.locator('#lonespan > .fluento-translation')).not.toHaveAttribute('data-e2e-stamp', 'v1');
         });
 
         // The permission is narrow: repair what is translated, never start
@@ -165,10 +165,10 @@ test.describe('@paragraph-unit pointer-driven per-unit translation', () => {
                 document.body.appendChild(fresh);
             });
 
-            await expect(page.locator('#lonespan > .duo-translation')).toContainText('appended tail');
-            await expect(page.locator('#fresh .duo-translation')).toHaveCount(0);
-            await expect(page.locator('#softbr .duo-translation')).toHaveCount(0);
-            await expect(page.locator('.duo-translation')).toHaveCount(1);
+            await expect(page.locator('#lonespan > .fluento-translation')).toContainText('appended tail');
+            await expect(page.locator('#fresh .fluento-translation')).toHaveCount(0);
+            await expect(page.locator('#softbr .fluento-translation')).toHaveCount(0);
+            await expect(page.locator('.fluento-translation')).toHaveCount(1);
         });
     });
 });

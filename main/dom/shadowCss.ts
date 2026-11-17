@@ -1,9 +1,9 @@
 // Per-shadow-root delivery of the translation stylesheet.
 //
 // `document.adoptedStyleSheets` and a `<style>` in `document.head` are scoped to
-// the document tree ONLY. A `.duo-translation` node we insert inside a page's
+// the document tree ONLY. A `.fluento-translation` node we insert inside a page's
 // shadow root therefore gets none of it — no background, no border, no font
-// colour — and `::highlight(duo-hl-*)` paints nothing, because a highlight rule
+// colour — and `::highlight(fluento-hl-*)` paints nothing, because a highlight rule
 // must live in the tree scope of the text it paints. So the same CSS string
 // `updateStyle` builds has to be delivered into every root we know about.
 //
@@ -93,7 +93,7 @@ function carrierFor(root: ShadowRoot, slot: Slot): HTMLStyleElement | null {
     if (el?.isConnected) return el;
     try {
         el = document.createElement("style");
-        el.setAttribute("data-duo-shadow-css", slot);
+        el.setAttribute("data-fluento-shadow-css", slot);
         root.appendChild(el);
     } catch {
         return null;

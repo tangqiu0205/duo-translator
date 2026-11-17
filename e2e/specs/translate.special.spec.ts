@@ -9,7 +9,7 @@ test.describe('@special translation', () => {
     // paragraph's class list between two translate rounds and verify the
     // second round still translates it.
     test('translates elements whose classes are dynamically rewritten', async ({ context, page, seedConfig, serviceWorker }) => {
-        await seedConfig({ config_defaultStrategy: 'never' });
+        await seedConfig({ fluento_config_defaultStrategy: 'never' });
         await mockTranslateProviders(context);
 
         await page.goto('/basic.html', { waitUntil: 'domcontentloaded' });
@@ -18,10 +18,10 @@ test.describe('@special translation', () => {
         // shows up, the initial marking pass has definitely completed.
         await expect(page.locator('#p1')).toBeVisible();
         await sendAction(serviceWorker, 'translate');
-        await expect(page.locator('#p1 .duo-translation')).toBeVisible();
+        await expect(page.locator('#p1 .fluento-translation')).toBeVisible();
 
         await sendAction(serviceWorker, 'showOriginal');
-        await expect(page.locator('#p1 .duo-translation')).toHaveCount(0);
+        await expect(page.locator('#p1 .fluento-translation')).toHaveCount(0);
 
         // Page-side class clobbering (the old class-based marking lost its
         // state here; the in-memory marks must survive it).
@@ -32,6 +32,6 @@ test.describe('@special translation', () => {
 
         // Round 2 — still translated.
         await sendAction(serviceWorker, 'translate');
-        await expect(page.locator('#p1 .duo-translation')).toBeVisible();
+        await expect(page.locator('#p1 .fluento-translation')).toBeVisible();
     });
 });

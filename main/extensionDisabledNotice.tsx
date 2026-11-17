@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// "Duo Translator has been disabled" dialog.
+// "Fluento has been disabled" dialog.
 //
 // Disabling/updating/reloading the extension leaves its content script running
 // on every already-open page (see utils/extensionContext.ts), so the float ball
@@ -19,7 +19,7 @@ import { bindThemeToElement } from "@/utils/theme";
 import { t, useLang } from "./aiWriting/i18n";
 import { isExtensionContextValid } from "@/utils/extensionContext";
 
-const HOST_ID = "duo-extension-disabled-host";
+const HOST_ID = "fluento-extension-disabled-host";
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -47,13 +47,13 @@ export function showExtensionDisabledNotice(): void {
     try {
         host = document.createElement("div");
         host.id = HOST_ID;
-        host.setAttribute("data-duo-ai-ui", "");
+        host.setAttribute("data-fluento-ai-ui", "");
         // <html>, not <body>: some SPAs replace the whole body node.
         document.documentElement.appendChild(host);
         const shadow = host.attachShadow({ mode: "open" });
         loadTailwindIntoShadow(shadow);
         const mount = document.createElement("div");
-        mount.className = "duo-ai-root";
+        mount.className = "fluento-ai-root";
         shadow.appendChild(mount);
         bindThemeToElement(mount);
         // createRoot BEFORE anything that could throw is assigned, so a partial
@@ -95,7 +95,7 @@ function ExtensionDisabledDialog({ onClose }: { onClose: () => void }) {
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="text-[15px] font-semibold">
-                    {t("extensionDisabledTitle", "Duo Translator has been disabled")}
+                    {t("extensionDisabledTitle", "Fluento has been disabled")}
                 </div>
                 <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
                     {t(
@@ -114,7 +114,7 @@ function ExtensionDisabledDialog({ onClose }: { onClose: () => void }) {
                     <button
                         type="button"
                         onClick={() => window.location.reload()}
-                        className="duo-ai-primary rounded-md px-4 py-1.5 text-[13px]"
+                        className="fluento-ai-primary rounded-md px-4 py-1.5 text-[13px]"
                     >
                         {t("extensionDisabledReload", "Reload page")}
                     </button>

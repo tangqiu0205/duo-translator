@@ -22,7 +22,7 @@ import { bindThemeToElement } from "@/utils/theme";
 import { t, useLang } from "@/main/aiWriting/i18n";
 import type { BuiltinAiDownloadProgress } from "./types";
 
-const HOST_ID = "duo-builtin-ai-model-host";
+const HOST_ID = "fluento-builtin-ai-model-host";
 
 /** How long the finished bar stays up before it fades out. */
 const DONE_LINGER_MS = 1200;
@@ -190,13 +190,13 @@ function ensureMounted(): void {
     if (!host) {
         host = document.createElement("div");
         host.id = HOST_ID;
-        host.setAttribute("data-duo-ai-ui", "");
+        host.setAttribute("data-fluento-ai-ui", "");
         document.documentElement.appendChild(host);
     }
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     loadTailwindIntoShadow(shadow);
     const mount = document.createElement("div");
-    mount.className = "duo-ai-root";
+    mount.className = "fluento-ai-root";
     shadow.appendChild(mount);
     // Claim the root BEFORE anything that can throw, so a failure here cannot
     // leave a half-built mount to be retried into a second React root (the

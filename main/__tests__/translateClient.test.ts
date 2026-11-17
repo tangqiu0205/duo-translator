@@ -112,7 +112,7 @@ describe("parseIndexedText", () => {
     });
 
     it("ignores additional attributes around the i= attribute", () => {
-        expect(parseIndexedText('<a class="duo" i=5 data-x="1">t</a>')).toEqual([
+        expect(parseIndexedText('<a class="sample" i=5 data-x="1">t</a>')).toEqual([
             { index: 5, text: "t" },
         ]);
     });

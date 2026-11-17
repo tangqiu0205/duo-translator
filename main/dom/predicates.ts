@@ -117,14 +117,14 @@ export function isNotMarkElement(element: HTMLElement): boolean {
     // todo support user defined class to exclude translation
     // todo support user defined tag to exclude
     return (
-        element.classList.contains("duo-translation") ||
-        element.classList.contains("duo-divide") ||
+        element.classList.contains("fluento-translation") ||
+        element.classList.contains("fluento-divide") ||
         // The highlight fallback moves a run's own text into these, so a scan
         // that marked one would translate our own output a second time, inside
         // the original. `curTranslated` qualifying the run keeps the scan from
         // ever descending this far; this is the second line of defense, and the
         // one that survives a future change to `flushRun`.
-        element.tagName === "DUO-SPAN" ||
+        element.tagName === "FLUENTO-SPAN" ||
         isTranslateIndicator(element) ||
         isOwnHost(element) ||
         isExcludedNodeType(element)

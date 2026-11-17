@@ -48,21 +48,21 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
     // the page's own styles.
     let highlightBox: HTMLElement | null = null
     // Persistent yellow boxes marking the already-selected (no-translate) regions,
-    // one per `.duo-selected` element. Also overlay children, so unclipped.
+    // one per `.fluento-selected` element. Also overlay children, so unclipped.
     const selectedBoxes = new Map<HTMLElement, HTMLElement>()
     // Last pointer position over the overlay, used to re-resolve/reposition the
     // highlight on scroll/resize (no mousemove fires then).
     let lastPointer: { x: number; y: number } | null = null
 
     async function activeSelectInteraction() {
-        // get all the rules of the current domain from the db, find the element and add class duo-selected
+        // get all the rules of the current domain from the db, find the element and add class fluento-selected
         let rules = await listRuleFromDB(domainWithPort)
         console.debug('rules:', rules)
         if (rules) {
             for (let rule of rules) {
                 let element = resolveRuleSelector(rule);
                 if (element) {
-                    element.classList.add('duo-selected')
+                    element.classList.add('fluento-selected')
                 }
             }
         }
@@ -72,9 +72,9 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
 
     function deactivateSelectInteraction() {
         console.debug('deactivateSelectionMode')
-        // remove all element that have duo-selected
-        deepQuerySelectorAll('.duo-selected').forEach((element) => {
-            element.classList.remove('duo-selected');
+        // remove all element that have fluento-selected
+        deepQuerySelectorAll('.fluento-selected').forEach((element) => {
+            element.classList.remove('fluento-selected');
         })
         lastPointer = null
         removeOverlay();
@@ -101,7 +101,7 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
     function ensureOverlay() {
         if (overlay) return;
         const el = document.createElement('div');
-        el.setAttribute('data-duo-rule-overlay', '');
+        el.setAttribute('data-fluento-rule-overlay', '');
         Object.assign(el.style, {
             position: 'fixed',
             inset: '0',
@@ -193,7 +193,7 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
         const el = elementUnderPointer(x, y);
         const target = el ? resolveRuleTarget(el) : undefined;
         if (target) {
-            const isSelected = target.classList.contains('duo-selected');
+            const isSelected = target.classList.contains('fluento-selected');
             showHighlight(target, isSelected ? 'red' : 'green');
             if (overlay) overlay.style.cursor = isSelected ? cursorTrashUrl : cursorAddUrl;
         } else {
@@ -238,11 +238,11 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
         if (highlightBox) highlightBox.style.display = 'none';
     }
 
-    // Rebuild the yellow boxes to match the current set of `.duo-selected`
+    // Rebuild the yellow boxes to match the current set of `.fluento-selected`
     // elements (adds boxes for new selections, drops boxes for cleared ones).
     function syncSelectedHighlights() {
         if (!overlay) return;
-        const selected = new Set(deepQuerySelectorAll('.duo-selected') as HTMLElement[]);
+        const selected = new Set(deepQuerySelectorAll('.fluento-selected') as HTMLElement[]);
         // Drop boxes whose element is no longer selected.
         for (const [element, box] of selectedBoxes) {
             if (!selected.has(element)) {
@@ -303,8 +303,8 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
      * @returns void
      */
     async function selectElementClicked(ele: HTMLElement) {
-        if (ele.classList.contains("duo-selected")) {
-            ele.classList.remove("duo-selected")
+        if (ele.classList.contains("fluento-selected")) {
+            ele.classList.remove("fluento-selected")
             // save to db
             let selector = getCssSelectorString(ele)
             deleteRuleFromDB(domainWithPort, selector)
@@ -312,11 +312,11 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
             // remove the no-translate mark
             removeNoTranslateMark(ele)
         } else {
-            // if ele's parent element has duo-selected, remove it
+            // if ele's parent element has fluento-selected, remove it
             let parent = parentElementOrHost(ele)
             while (parent) {
-                if (parent.classList.contains("duo-selected")) {
-                    parent.classList.remove("duo-selected")
+                if (parent.classList.contains("fluento-selected")) {
+                    parent.classList.remove("fluento-selected")
                     const parentSelector = getCssSelectorString(parent)
                     deleteRuleFromDB(domainWithPort, parentSelector)
                     forgetRule(parentSelector)
@@ -326,14 +326,14 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
                 parent = parentElementOrHost(parent)
             }
             if (ele.classList.length == 0) {
-                ele.setAttribute("class", "duo-selected")
+                ele.setAttribute("class", "fluento-selected")
             } else {
-                ele.classList.add("duo-selected")
+                ele.classList.add("fluento-selected")
             }
-            // remove children element that has duo-selected
-            let children = deepQuerySelectorAll(".duo-selected", ele)
+            // remove children element that has fluento-selected
+            let children = deepQuerySelectorAll(".fluento-selected", ele)
             for (let child of children) {
-                child.classList.remove("duo-selected")
+                child.classList.remove("fluento-selected")
                 // save to db
                 let selector = getCssSelectorString(child as HTMLElement)
                 await deleteRuleFromDB(domainWithPort, selector)
@@ -359,7 +359,7 @@ export function createRuleMode(domainWithPort: string): RuleModeController {
     function findSelectedAncestor(element: HTMLElement): HTMLElement | undefined {
         let current: HTMLElement | null = element
         while (current && current !== document.body && current !== document.documentElement) {
-            if (current.classList.contains("duo-selected")) {
+            if (current.classList.contains("fluento-selected")) {
                 return current
             }
             current = parentElementOrHost(current)

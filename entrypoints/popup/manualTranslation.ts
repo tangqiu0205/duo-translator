@@ -1,7 +1,8 @@
 import { TRANSLATE_SERVICE } from '@/main/constants';
 import { decodeHtmlText } from '@/utils/dom';
+import { isPublicTranslationService } from '@/main/publicTranslationConfig';
 
-export const MANUAL_DRAFT_KEY = 'duoManualTranslationV1';
+export const MANUAL_DRAFT_KEY = 'fluentoManualTranslationV1';
 export const MANUAL_TEXT_LIMIT = 4000; // Below Microsoft's per-text truncation threshold.
 
 export interface ManualResult {
@@ -10,6 +11,7 @@ export interface ManualResult {
   sourceLang: string;
   targetLang: string;
   service: string;
+  actualService?: string;
 }
 
 export interface ManualDraft {
@@ -47,16 +49,15 @@ export function readManualDraft(storage: Storage, fallback: ManualDraft): Manual
 // These adapters expect HTML, even though this surface accepts only plain text.
 // Escape before translation and decode once after; never render provider HTML.
 const HTML_SERVICES = new Set<string>([
-  TRANSLATE_SERVICE.GOOGLE, TRANSLATE_SERVICE.AZURE, TRANSLATE_SERVICE.GOOGLE_CLOUD,
+  TRANSLATE_SERVICE.FREE_AUTO, TRANSLATE_SERVICE.GOOGLE, TRANSLATE_SERVICE.AZURE, TRANSLATE_SERVICE.GOOGLE_CLOUD,
   TRANSLATE_SERVICE.YANDEX, TRANSLATE_SERVICE.BAIDU,
-  TRANSLATE_SERVICE.BILIBILI, TRANSLATE_SERVICE.DOUBAO, TRANSLATE_SERVICE.DOUBAO_VOLC, TRANSLATE_SERVICE.DOUBAO_MICROSOFT,
 ]);
 
 export function prepareManualText(service: string, text: string): string {
-  if (!HTML_SERVICES.has(service)) return text;
+  if (!HTML_SERVICES.has(service) && !isPublicTranslationService(service)) return text;
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export function readManualText(service: string, text: string): string {
-  return HTML_SERVICES.has(service) ? decodeHtmlText(text) : text;
+  return HTML_SERVICES.has(service) || isPublicTranslationService(service) ? decodeHtmlText(text) : text;
 }

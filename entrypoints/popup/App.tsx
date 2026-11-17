@@ -5,7 +5,7 @@ import { Ban, Check, ChevronDown, ChevronRight, EyeOff, Globe, HelpCircle, Langu
 import {
   ACTION,
   APP_NAME,
-  APP_NAME_PASCAL_CASE,
+  APP_LOGO_PATH,
   CONFIG_KEY,
   browserTargetLanguage,
   DB_ACTION,
@@ -507,8 +507,8 @@ export default function App({ embedded = false, uiPrefs }: AppProps = {}) {
       {/* Keep the theme menu above the scrolling body. */}
       <div className="popup-header relative z-20 flex h-11 shrink-0 items-center justify-between border-b border-line px-3">
         <div className="flex items-center gap-2 text-left">
-          <img className="h-5 w-5" src={`${APP_NAME_PASCAL_CASE || 'DuoTranslator'}.svg`} alt="" />
-          <span className="text-[13px] font-semibold">{APP_NAME || 'Duo Translator'}</span>
+          <img className="h-5 w-5" src={APP_LOGO_PATH} alt="" />
+          <span className="text-[13px] font-semibold">{APP_NAME}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {/* Theme switcher — sun/moon reflects the resolved theme; the menu

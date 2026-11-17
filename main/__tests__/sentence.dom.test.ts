@@ -3,7 +3,7 @@
 // Tests for main/dom/sentence.ts:
 //   - splitSentence  (aggregation logic; sentence-splitter is mocked so the
 //                     tokenizer's behaviour doesn't leak into the assertions)
-//   - wrapTextNode2Span (text-node → <duo-span> wrapping, the highlight fallback
+//   - wrapTextNode2Span (text-node → <fluento-span> wrapping, the highlight fallback
 //                     for browsers without the CSS Custom Highlight API; needs a
 //                     real DOM)
 // The preferred Range-based path that consumes the same splitSentence output is
@@ -75,10 +75,10 @@ describe("wrapTextNode2Span", () => {
         const spans = wrapTextNode2Span(textNodesOf(p), ["Hello"], ignore);
 
         expect(spans).toHaveLength(1);
-        expect(spans[0].tagName).toBe("DUO-SPAN");
-        expect(spans[0].getAttribute("duo-sequence")).toBe("0");
+        expect(spans[0].tagName).toBe("FLUENTO-SPAN");
+        expect(spans[0].getAttribute("fluento-sequence")).toBe("0");
         expect(spans[0].textContent).toBe("Hello");
-        expect(p.querySelector("duo-span")).toBe(spans[0]);
+        expect(p.querySelector("fluento-span")).toBe(spans[0]);
         expect(ignore.has(spans[0])).toBe(true);
     });
 
@@ -89,7 +89,7 @@ describe("wrapTextNode2Span", () => {
         const spans = wrapTextNode2Span(textNodesOf(p), ["Hi ", "there"], new WeakSet());
 
         expect(spans).toHaveLength(2);
-        expect(spans.map((s) => s.getAttribute("duo-sequence"))).toEqual(["0", "1"]);
+        expect(spans.map((s) => s.getAttribute("fluento-sequence"))).toEqual(["0", "1"]);
         expect(spans.map((s) => s.textContent)).toEqual(["Hi ", "there"]);
     });
 
@@ -103,7 +103,7 @@ describe("wrapTextNode2Span", () => {
         const spans = wrapTextNode2Span(nodes, ["Hello"], new WeakSet());
 
         expect(spans).toHaveLength(2);
-        expect(spans.every((s) => s.getAttribute("duo-sequence") === "0")).toBe(true);
+        expect(spans.every((s) => s.getAttribute("fluento-sequence") === "0")).toBe(true);
         expect(spans.map((s) => s.textContent)).toEqual(["Hel", "lo"]);
     });
 
@@ -123,7 +123,7 @@ describe("wrapTextNode2Span", () => {
 
         expect(spans).toHaveLength(2);
         expect(spans.map((s) => s.textContent)).toEqual(["Hi ", "there"]);
-        expect(Array.from(root.querySelectorAll("duo-span"))).toEqual(spans);
+        expect(Array.from(root.querySelectorAll("fluento-span"))).toEqual(spans);
     });
 
     it("returns [] for no sentences", () => {
@@ -132,13 +132,13 @@ describe("wrapTextNode2Span", () => {
         expect(wrapTextNode2Span(textNodesOf(p), [], new WeakSet())).toEqual([]);
     });
 
-    it("offsets duo-sequence by startSequence", () => {
+    it("offsets fluento-sequence by startSequence", () => {
         document.body.innerHTML = "<p>Hi there</p>";
         const p = document.body.querySelector("p")!;
 
         const spans = wrapTextNode2Span(textNodesOf(p), ["Hi ", "there"], new WeakSet(), 3);
 
-        expect(spans.map((s) => s.getAttribute("duo-sequence"))).toEqual(["3", "4"]);
+        expect(spans.map((s) => s.getAttribute("fluento-sequence"))).toEqual(["3", "4"]);
     });
 
     it("two batches with accumulated offsets keep sequences unique in one container", () => {
@@ -156,7 +156,7 @@ describe("wrapTextNode2Span", () => {
             sentences1.length,
         );
 
-        const all = [...spans1, ...spans2].map((s) => s.getAttribute("duo-sequence"));
+        const all = [...spans1, ...spans2].map((s) => s.getAttribute("fluento-sequence"));
         expect(all).toEqual(["0", "1", "2", "3"]);
         expect(new Set(all).size).toBe(all.length);
     });

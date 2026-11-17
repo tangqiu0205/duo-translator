@@ -45,8 +45,13 @@ import { utf8Length } from "@/utils/text";
 import { ABORT_SCOPE, handleAbort, handleAbortable, handleAsync } from "@/main/messageBridge";
 import { BaiduTranslator, type BaiduCredentials } from "@/main/baiduTranslator";
 import { BilibiliTranslator, getBilibiliModel } from "@/main/bilibiliTranslator";
-import { DoubaoTranslator } from "@/main/doubaoTranslator";
-import { isDoubaoService } from "@/main/publicTranslationConfig";
+import { WebTranslator } from "@/main/webTranslator";
+import { WEB_TRANSLATION_SERVICES, type WebTranslationService } from "@/main/webTranslationConfig";
+import { DoubaoTranslator, supportsDoubaoTarget } from "@/main/doubaoTranslator";
+import { isDoubaoService, isPublicTranslationService } from "@/main/publicTranslationConfig";
+import { FREE_TRANSLATION_SERVICE, readFreeTranslationSettings } from "@/main/freeTranslationConfig";
+import { FreeTranslationRouter } from "@/main/freeTranslationRouter";
+import { translatePublicMapped, decodePublicTranslationText, escapePublicTranslationHtml } from "@/main/publicTranslationText";
 
 // ---------------------------------------------------------------------------
 // Provider HTTP
@@ -94,7 +99,7 @@ const PROVIDER_ERROR_BODY_CHARS = 300;
 function providerHttpError(provider: string, url: string, response: ProviderResponse): Error {
     const snippet = (response.bodyText || "").trim().slice(0, PROVIDER_ERROR_BODY_CHARS);
     const status = `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""}`;
-    return new Error(`${provider} ${status} (${hostOf(url)})${snippet ? ": " + snippet : ""}`);
+    return Object.assign(new Error(`${provider} ${status} (${hostOf(url)})${snippet ? ": " + snippet : ""}`), { status: response.status });
 }
 
 /**
@@ -1263,6 +1268,15 @@ export class BilibiliTranslateService extends TranslateService {
     }
 }
 
+export class WebTranslateService extends TranslateService {
+    private readonly translator: WebTranslator;
+    constructor(readonly name: WebTranslationService) { super(); this.translator = new WebTranslator(name); }
+    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string): Promise<TranslateResult[]> {
+        const results = await this.translator.translate(texts, target, signal, source);
+        return results.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
+    }
+}
+
 export class DoubaoTranslateService extends TranslateService {
     private readonly translator: DoubaoTranslator;
     constructor(readonly name: string) { super(); this.translator = new DoubaoTranslator(name); }
@@ -1272,6 +1286,43 @@ export class DoubaoTranslateService extends TranslateService {
     }
 }
 
+
+const freeRouter = new FreeTranslationRouter();
+export class FreeTranslateService extends TranslateService {
+    readonly name = FREE_TRANSLATION_SERVICE;
+    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string, options?: TranslateRequestOptions): Promise<TranslateResult[]> {
+        if (!texts.length) return [];
+        const [saved, disabled] = await Promise.all([
+            configRepo.get(CONFIG_KEY.FREE_TRANSLATION),
+            configRepo.get(CONFIG_KEY.DISABLED_TRANSLATE_SERVICES),
+        ]);
+        const config = readFreeTranslationSettings(saved);
+        const excluded = new Set(Array.isArray(disabled) ? disabled : []);
+        const candidates = config.services.filter((id) => !excluded.has(id)
+            && (!isDoubaoService(id) || !source && supportsDoubaoTarget(target, options?.scene))
+            // Microsoft truncates oversized individual items; select another route instead.
+            && (id !== TRANSLATE_SERVICE.MICROSOFT || texts.every((text) => text.length <= MS_BATCH_CHAR_LIMIT)));
+        const result = await freeRouter.run(candidates, config.mode, async (id, attemptSignal) => {
+            if (isPublicTranslationService(id)) {
+                const translated = await translateTextsWithCache(id, texts, target, attemptSignal, source, options?.scene);
+                if (!translated || translated.length !== texts.length || translated.some((item, index) =>
+                    typeof item?.translatedMappedHtmlText !== 'string' || texts[index].trim() && !item.translatedMappedHtmlText.trim())) {
+                    throw new Error('Incomplete free translation batch');
+                }
+                return translated;
+            }
+            // Native adapters have different HTML conventions. Normalize them to
+            // the same escaped <bN> protocol, repairing markers when necessary.
+            const translated = await translatePublicMapped(texts, async (queries) => {
+                const items = await translateTextsWithCache(id, queries.map(escapePublicTranslationHtml), target, attemptSignal, source, options?.scene);
+                if (!items) throw new Error(`Unknown free translation service: ${id}`);
+                return items.map((item) => ({ text: decodePublicTranslationText(item.translatedMappedHtmlText), sourceLang: item.sourceLang }));
+            }, attemptSignal);
+            return translated.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
+        }, signal);
+        return result.value.map((item) => Object.assign(item, { actualService: result.service }));
+    }
+}
 
 export const googleTranslationService: TranslateService = new GoogleTranslateService();
 export const azureTranslationService: TranslateService = new AzureTranslateService();
@@ -1288,6 +1339,8 @@ export const builtinAiTranslationService: TranslateService = new BuiltinAiTransl
 
 // TODO: support user-defined custom keys / endpoints (Youdao, …).
 export const translationServices = new Map<string, TranslateService>([
+    [FREE_TRANSLATION_SERVICE, new FreeTranslateService()],
+    ...WEB_TRANSLATION_SERVICES.map((id): [string, TranslateService] => [id, new WebTranslateService(id)]),
     [googleTranslationService.name, googleTranslationService],
     [azureTranslationService.name, azureTranslationService],
     [googleCloudTranslationService.name, googleCloudTranslationService],
@@ -1401,6 +1454,11 @@ export async function translateTextsWithCache(
     if (texts.length === 0) return [];
     let provider = resolveTranslateService(service);
     if (!provider) return undefined;
+    // The pool must select a concrete route before reading/writing its cache.
+    // Never cache by pool id: membership, credentials or model may change.
+    if (service === FREE_TRANSLATION_SERVICE) {
+        return provider.translateText(texts, targetLang, signal, sourceLang, scene ? { scene } : undefined);
+    }
     let namespace = service;
     if (service === TRANSLATE_SERVICE.BILIBILI) {
         // Resolve once so a concurrent model edit cannot mix cache namespaces.

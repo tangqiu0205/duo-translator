@@ -23,7 +23,7 @@ import { isTranslateIndicator } from "@/main/dom/predicates";
  *
  * An indicator is inserted right after the unit it belongs to, so without this
  * a unit's anchors would differ depending on whether one happened to be showing
- * — and the anchors ARE the unit's identity (they are what a DuoUnitRecord
+ * — and the anchors ARE the unit's identity (they are what a BilingualUnitRecord
  * stores and what revalidateUnitTarget matches on). An anchor that dissolves
  * when the spinner is removed would silently degrade every later write-back and
  * restore to whole-container behavior.
@@ -40,21 +40,21 @@ export function siblingSkippingIndicators(node: ChildNode | null, dir: "next" | 
  * Nodes we insert *after* a unit rather than into it: the transient translating
  * indicator, the divide, and the translation itself.
  *
- * `duo-span` is deliberately NOT one of them — the highlight fallback wraps the
+ * `fluento-span` is deliberately NOT one of them — the highlight fallback wraps the
  * run's own text in those, so they are unit *content* and must keep counting as
  * such.
  */
 function isOwnUnitOutput(node: ChildNode): boolean {
     if (isTranslateIndicator(node)) return true;
     const classList = (node as Element).classList;
-    return !!classList && (classList.contains("duo-divide") || classList.contains("duo-translation"));
+    return !!classList && (classList.contains("fluento-divide") || classList.contains("fluento-translation"));
 }
 
 /**
  * The next/previous sibling for *anchor* purposes: steps over everything we
  * ourselves put next to a unit.
  *
- * The anchors are a unit's identity — a `DuoUnitRecord` captures them BEFORE
+ * The anchors are a unit's identity — a `BilingualUnitRecord` captures them BEFORE
  * inserting the divide and the translation, and later scans re-derive them to
  * recognize the same run. If our own output could serve as an anchor, that
  * identity would change the instant the translation landed and every later
@@ -120,7 +120,7 @@ export function nodesInRange(container: UnitContainer, range: UnitRange): ChildN
     while (node && node !== end) {
         // Our own indicator is never part of the unit's content: including it
         // would put its box into the pointer hit-test rects and into the
-        // duo-span sweep on restore.
+        // fluento-span sweep on restore.
         if (!isTranslateIndicator(node)) out.push(node);
         node = node.nextSibling;
     }

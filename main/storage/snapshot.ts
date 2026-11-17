@@ -13,12 +13,12 @@
 //
 // COLLECTION KEYS recurse one level deeper. A key whose value is an array of
 // independent elements (AI providers, site rules, subscriptions, the two string
-// sets, rule_<host>) was resolved whole by the per-key rule, so device A adding
+// sets, fluento_rule_<host>) was resolved whole by the per-key rule, so device A adding
 // a provider and device B adding another kept only one of them. Those keys are
 // listed in storage/collections.ts with an element-identity function, and the
 // SAME resolver (`resolveLWW`) then runs per element. Element clocks travel in
 // the snapshot's optional `elements` section and live locally in
-// `__sync_meta.elements`; the stored config value stays a plain array, so no
+// `__fluento_sync_meta.elements`; the stored config value stays a plain array, so no
 // reader of those keys is affected.
 //
 // Internal book-keeping keys (migration flag, sync metadata, OAuth tokens, etc.)
@@ -85,13 +85,13 @@ const DATA_PREFIXES = [STORAGE_PREFIX.CONFIG, STORAGE_PREFIX.DOMAIN, STORAGE_PRE
 
 /**
  * Whether a storage key participates in the synced snapshot — i.e. it's a
- * user-data key (config_/domain_/rule_) that isn't on the always-excluded list.
+ * user-data key (fluento_config_/fluento_domain_/fluento_rule_) that isn't on the always-excluded list.
  *
  * This is an ALLOW-list, and every snapshot boundary (build / merge / import)
  * goes through it. That is deliberate and was not always so: `buildSnapshot`
  * used to take all of `storage.local` minus `ALWAYS_EXCLUDED`, a deny-list —
  * which silently uploaded every internal key nobody remembered to name there.
- * `__site_rule_cache` (hundreds of re-fetchable subscription bodies) rode along
+ * `__fluento_site_rule_cache` (hundreds of re-fetchable subscription bodies) rode along
  * that way for a while, with three separate comments claiming it did not,
  * because they all reasoned about this function while the build path didn't use
  * it. A new internal key must now be opted IN to sync, not out of it.
@@ -143,7 +143,7 @@ export async function buildSnapshot(opts: BuildOptions = {}): Promise<Snapshot> 
     const meta: Record<string, number> = {};
     for (const [k, v] of Object.entries(raw)) {
         // `raw` is the whole local area; only user-data keys belong in a
-        // snapshot. `exclude` above still matters — it holds config_-prefixed
+        // snapshot. `exclude` above still matters — it holds fluento_config_-prefixed
         // keys that pass this gate but must not sync (secrets, per-device prefs).
         if (!isSnapshotKey(k)) continue;
         // Sync provider records but strip the apiKey field when not syncing

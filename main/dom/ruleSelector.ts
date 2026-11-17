@@ -1,7 +1,7 @@
 // Addressing an element for the per-domain "no-translate area" rules, including
 // elements inside shadow roots.
 //
-// A rule is stored as a plain string in `rule_<host>` and has two consumers:
+// A rule is stored as a plain string in `fluento_rule_<host>` and has two consumers:
 // `document.querySelector` when rule mode re-applies the selection, and
 // `el.matches(joined)` in the marking scan. Neither can name an element inside a
 // shadow root: `querySelector` does not pierce, and `css-selector-generator`
@@ -27,7 +27,7 @@ export const SHADOW_PATH_SEP = " >>> ";
 const SELECTOR_OPTIONS = {
     // Never build a selector out of our own classes — they come and go.
     selectors: ["id", "class", "tag"] as ("id" | "class" | "tag")[],
-    blacklist: [".duo-*"],
+    blacklist: [".fluento-*"],
 };
 
 /** Whether a stored rule addresses something inside a shadow root. */

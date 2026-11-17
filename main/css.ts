@@ -59,7 +59,7 @@ export function getCSSRuleString(style: string, color?: string): string {
             cssRule = `filter: blur(${BLUR_RADIUS_PX}px);transition: filter 0.2s ease;`;
             break;
         case STYLE_QUOTE:
-            // inline-block so the bar spans every line: `.duo-translation` is a
+            // inline-block so the bar spans every line: `.fluento-translation` is a
             // <span>, and an inline box draws its left border on the first line
             // fragment only. It stays inline-*level* rather than block so the
             // preceding <br> still does its job — a block box after a <br>
@@ -114,7 +114,7 @@ export function getCSSRuleString(style: string, color?: string): string {
 /**
  * The hover half of the blur style, or "" for every other style. Kept separate
  * from getCSSRuleString because it needs its own selector
- * (`.duo-translation:hover`), not another declaration.
+ * (`.fluento-translation:hover`), not another declaration.
  *
  * Blur alone gets one, because blurred text cannot be read at all and a style
  * with no way back would just be "hide the translation". Dim stays dimmed on
@@ -142,14 +142,14 @@ export function getEnhanceHoverRuleString(style: string): string {
  * edges, which is what `underline overline` draws, are as close as that API
  * gets. The left and right edges are not achievable at all.
  *
- * The <duo-span> fallback *could* draw a real border, but deliberately uses the
+ * The <fluento-span> fallback *could* draw a real border, but deliberately uses the
  * same mapping, for two reasons: the two paths then look identical on old and
  * new browsers, and a real border there draws one box per span — so a sentence
  * crossing an inline element (`Hel<b>lo</b> there.`) gets internal vertical
  * edges, while the underlines of adjacent elements are collinear and read as one
  * continuous line.
  *
- * `.duo-translation` keeps its real border (getCSSRuleString): it is a single
+ * `.fluento-translation` keeps its real border (getCSSRuleString): it is a single
  * block-level element, where neither problem arises.
  *
  * No text-underline-offset here, unlike the *Line styles: there is no
@@ -197,28 +197,28 @@ export function buildTranslationCss(opts: TranslationCssOptions): string {
     const styleColor = isQuote ? opts.quoteBorderColor : opts.borderColor;
     const translationRule = getCSSRuleString(opts.borderStyle, styleColor);
     // The quote bar is the one style that depends on the *layout* the
-    // translation landed in. content.ts inserts either a <br class="duo-divide">
-    // (own line) or a <span class="duo-divide"> of two nbsp (appended inline,
+    // translation landed in. content.ts inserts either a <br class="fluento-divide">
+    // (own line) or a <span class="fluento-divide"> of two nbsp (appended inline,
     // for translations under TRANSLATION_LINE_BREAK_MIN_CHARS), always directly
     // before the translation — so the adjacent-sibling selector asks exactly
     // "did this one get its own line?". A quote bar mid-sentence would read as
     // a stray glyph, so the inline case keeps only the color declarations.
     if (isQuote) {
         if (translationDecls.length > 0) {
-            blocks.push(`.duo-translation { ${translationDecls.join(" ")} }`);
+            blocks.push(`.fluento-translation { ${translationDecls.join(" ")} }`);
         }
         if (translationRule) {
-            blocks.push(`br.duo-divide + .duo-translation { ${translationRule} }`);
+            blocks.push(`br.fluento-divide + .fluento-translation { ${translationRule} }`);
         }
     } else {
         if (translationRule) translationDecls.push(translationRule);
         if (translationDecls.length > 0) {
-            blocks.push(`.duo-translation { ${translationDecls.join(" ")} }`);
+            blocks.push(`.fluento-translation { ${translationDecls.join(" ")} }`);
         }
     }
     const hoverRule = getEnhanceHoverRuleString(opts.borderStyle);
     if (hoverRule) {
-        blocks.push(`.duo-translation:hover { ${hoverRule} }`);
+        blocks.push(`.fluento-translation:hover { ${hoverRule} }`);
     }
 
     // Bilingual highlighting — unified across the original and its translation,
@@ -228,7 +228,7 @@ export function buildTranslationCss(opts: TranslationCssOptions): string {
     //   - `::highlight(…)` for the CSS Custom Highlight API path, where the
     //     hovered sentence is a Range registered in CSS.highlights and nothing
     //     in the page is wrapped;
-    //   - `.duo-highlight-*` for the <duo-span> fallback on browsers without
+    //   - `.fluento-highlight-*` for the <fluento-span> fallback on browsers without
     //     that API.
     //
     // Both get the *same* declarations — see getHighlightCSSRuleString for why
@@ -250,7 +250,7 @@ export function buildTranslationCss(opts: TranslationCssOptions): string {
             blocks.push(
                 `::highlight(${HIGHLIGHT_ORIGINAL}), ::highlight(${HIGHLIGHT_TRANSLATION}) { ${decls} }`,
             );
-            blocks.push(`.duo-highlight-original, .duo-highlight-translation { ${decls} }`);
+            blocks.push(`.fluento-highlight-original, .fluento-highlight-translation { ${decls} }`);
         }
     }
     return blocks.join("\n");

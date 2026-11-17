@@ -172,7 +172,7 @@ describe("with a ShadowRoot container", () => {
 
 describe("the translating indicator is stepped over", () => {
     // The marker is inserted right after the unit it belongs to while the
-    // request is in flight. A unit's anchors ARE its identity (a DuoUnitRecord
+    // request is in flight. A unit's anchors ARE its identity (a BilingualUnitRecord
     // stores them, revalidateUnitTarget matches on them), so they must be the
     // same whether or not a marker happens to be showing — otherwise every
     // anchor captured during a translation would dissolve when it is removed.
@@ -180,7 +180,7 @@ describe("the translating indicator is stepped over", () => {
         const div = el("<div>one<br><br>two</div>");
         const before = segmentParagraph(div).units.map(unitRangeOf);
 
-        const marker = document.createElement("duo-loading");
+        const marker = document.createElement("fluento-loading");
         div.insertBefore(marker, div.childNodes[1]);
         const after = segmentParagraph(div).units.map(unitRangeOf);
 
@@ -193,7 +193,7 @@ describe("the translating indicator is stepped over", () => {
 
     it("nodesInRange leaves the marker out of the unit's content", () => {
         const div = el("<div>one<br><br>two</div>");
-        const marker = document.createElement("duo-loading");
+        const marker = document.createElement("fluento-loading");
         div.appendChild(marker);
         const units = segmentParagraph(div).units;
         const last = units[units.length - 1];
@@ -202,16 +202,16 @@ describe("the translating indicator is stepped over", () => {
 });
 
 describe("our own translation output is stepped over too", () => {
-    // A DuoUnitRecord captures the anchors BEFORE inserting the divide and the
+    // A BilingualUnitRecord captures the anchors BEFORE inserting the divide and the
     // translation, and later code matches a re-derived unit against them. If
     // our own inserted nodes could serve as anchors, a translated unit's
     // identity would change the instant its translation landed and every such
     // match would fail — permanently, not just while something is in flight.
     function insertTranslationAfter(anchor: ChildNode) {
         const divide = document.createElement("br");
-        divide.className = "duo-divide";
+        divide.className = "fluento-divide";
         const translation = document.createElement("span");
-        translation.className = "duo-translation";
+        translation.className = "fluento-translation";
         translation.textContent = "一";
         anchor.after(divide, translation);
         return { divide, translation };

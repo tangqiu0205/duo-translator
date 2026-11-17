@@ -77,7 +77,7 @@ export default defineContentScript({
         // the caption module ourselves) and each explicit track request.
         const CAPTURE_IDLE_MS = 15_000;
 
-        type XhrWithUrl = XMLHttpRequest & { __duoUrl?: string };
+        type XhrWithUrl = XMLHttpRequest & { __fluentoUrl?: string };
 
         let patched = false;
         let pendingCaptures = 0;
@@ -121,14 +121,14 @@ export default defineContentScript({
 
             ourOpen = function (this: XhrWithUrl, ...args: any[]) {
                 try {
-                    if (isTimedtext(args[1])) this.__duoUrl = String(args[1]);
+                    if (isTimedtext(args[1])) this.__fluentoUrl = String(args[1]);
                 } catch { /* noop */ }
                 return (nativeOpen as any).apply(this, args);
             } as typeof XMLHttpRequest.prototype.open;
             XMLHttpRequest.prototype.open = ourOpen;
 
             ourSend = function (this: XhrWithUrl, ...args: any[]) {
-                const url = this.__duoUrl;
+                const url = this.__fluentoUrl;
                 if (url) {
                     this.addEventListener("load", () => {
                         try { record(url, this.responseText ?? ""); } catch { /* non-text response */ }
