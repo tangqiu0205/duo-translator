@@ -65,6 +65,28 @@
   color: var(--color-ink);
 }
 
+/* Source/result badges in selection translation. Text measurement lives in
+ * the adjacent flex child so the badge never overlaps text or action buttons. */
+.fluento-selection-label {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--color-hover-3);
+  color: var(--color-ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.fluento-selection-label[data-kind="translation"] {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+}
+
 /* Light theme — token overrides scoped to the mount root. `data-theme` is
  * kept in sync by bindThemeToElement() (utils/theme.ts) at every mount site;
  * custom properties inherit to the whole shadow tree. */

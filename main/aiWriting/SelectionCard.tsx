@@ -209,35 +209,40 @@ function OriginalBlock({
         />
     );
     return (
-        <div ref={rowRef} className="relative overflow-hidden px-3 py-2 border-b border-line">
-            <LineProbe text={text} probeRef={probeRef} />
-            {needsOwnRow ? (
-                <>
-                    <div className="flex items-center gap-1">
-                        <button
-                            type="button"
-                            onClick={onToggleExpanded}
-                            title={expanded ? t("collapse", "Collapse") : t("expand", "Expand")}
-                            aria-label={expanded ? t("collapse", "Collapse") : t("expand", "Expand")}
-                            aria-expanded={expanded}
-                            className="h-6 w-6 inline-flex items-center justify-center rounded text-ink-soft hover:bg-hover-3 hover:text-ink-2"
+        <div className="flex items-start gap-2 px-3 py-2 border-b border-line">
+            <span className="fluento-selection-label" data-kind="original">
+                {t("selectionPopupSectionOriginal", "Original")}
+            </span>
+            <div ref={rowRef} className="relative min-w-0 flex-1 overflow-hidden">
+                <LineProbe text={text} probeRef={probeRef} />
+                {needsOwnRow ? (
+                    <>
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={onToggleExpanded}
+                                title={expanded ? t("collapse", "Collapse") : t("expand", "Expand")}
+                                aria-label={expanded ? t("collapse", "Collapse") : t("expand", "Expand")}
+                                aria-expanded={expanded}
+                                className="h-6 w-6 inline-flex items-center justify-center rounded text-ink-soft hover:bg-hover-3 hover:text-ink-2"
+                            >
+                                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                            </button>
+                            <div className="ml-auto">{actions}</div>
+                        </div>
+                        <div
+                            className={`text-[13px] leading-normal text-ink-2 ${expanded ? "whitespace-pre-wrap wrap-break-word" : "truncate"}`}
                         >
-                            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
-                        </button>
-                        <div className="ml-auto">{actions}</div>
+                            {text}
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0 truncate text-[13px] leading-normal text-ink-2">{text}</div>
+                        {actions}
                     </div>
-                    <div
-                        className={`text-[13px] leading-normal text-ink-2 ${expanded ? "whitespace-pre-wrap wrap-break-word" : "truncate"}`}
-                    >
-                        {text}
-                    </div>
-                </>
-            ) : (
-                <div className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0 truncate text-[13px] leading-normal text-ink-2">{text}</div>
-                    {actions}
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }
@@ -284,11 +289,7 @@ function TranslationBlock({
         />
     );
     return (
-        <div
-            ref={rowRef}
-            className={`relative overflow-hidden px-3 py-2.5 ${divided ? "border-t border-line" : ""}`}
-        >
-            <LineProbe text={run.output} probeRef={probeRef} />
+        <div className={`px-3 py-2.5 ${divided ? "border-t border-line" : ""}`}>
             {/* Whose answer this is. Deliberately small and quiet: it is a
                 provenance mark on the translation, not a heading over it. */}
             {showLabel && (
@@ -296,19 +297,27 @@ function TranslationBlock({
                     {run.label}
                 </div>
             )}
-            {needsOwnRow ? (
-                <>
-                    <div className="flex justify-end">{actions}</div>
-                    <div className="text-[13px] leading-normal text-ink whitespace-pre-wrap wrap-break-word">{body}</div>
-                </>
-            ) : (
-                <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0 text-[13px] leading-normal text-ink whitespace-pre-wrap wrap-break-word">
-                        {body}
-                    </div>
-                    {actions}
+            <div className="flex items-start gap-2">
+                <span className="fluento-selection-label" data-kind="translation">
+                    {t("selectionPopupSectionTranslation", "Translation")}
+                </span>
+                <div ref={rowRef} className="relative min-w-0 flex-1 overflow-hidden">
+                    <LineProbe text={run.output} probeRef={probeRef} />
+                    {needsOwnRow ? (
+                        <>
+                            <div className="flex justify-end">{actions}</div>
+                            <div className="text-[13px] leading-normal text-ink whitespace-pre-wrap wrap-break-word">{body}</div>
+                        </>
+                    ) : (
+                        <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0 text-[13px] leading-normal text-ink whitespace-pre-wrap wrap-break-word">
+                                {body}
+                            </div>
+                            {actions}
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </div>
     );
 }
