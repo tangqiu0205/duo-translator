@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronRight, Copy, Loader2, Pin, Settings2, Volume2, X } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, ChevronRight, Copy, Link2, Loader2, Pin, Settings2, Volume2, X } from "lucide-react";
 import { t } from "./i18n";
 import { useCopyFeedback } from "./useCopyFeedback";
 import type { useTts } from "./useTts";
@@ -335,6 +335,30 @@ const SELECT_CLS =
 
 const serviceName = (o: ServiceOption) => (o.i18nKey ? t(o.i18nKey, o.label) : o.label);
 
+// Inline bundled assets: page-side Shadow DOM cannot load extension-private
+// /services URLs, and exposing those files to every website is unnecessary.
+const serviceIcons = import.meta.glob<string>('../../public/services/*.svg', {
+    query: '?raw', import: 'default', eager: true,
+});
+
+function SelectionPicker({ value, onChange, label, display, width, iconId, children }: {
+    value: string; onChange: (value: string) => void; label: string; display: string;
+    width: string; iconId?: string; children: React.ReactNode;
+}) {
+    const icon = iconId ? serviceIcons[`../../public/services/${iconId}.svg`] : undefined;
+    return (
+        <span className={`${SELECT_CLS} relative inline-flex items-center gap-1.5 focus-within:border-accent ${width}`}>
+            {icon && <span aria-hidden="true" className="fluento-selection-engine-icon h-4 w-4 shrink-0" dangerouslySetInnerHTML={{ __html: icon }} />}
+            <span aria-hidden="true" className="min-w-0 flex-1 truncate">{display}</span>
+            <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
+            <select value={value} onChange={event => onChange(event.target.value)} title={label} aria-label={label}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
+                {children}
+            </select>
+        </span>
+    );
+}
+
 /**
  * A menu hanging off one of the header buttons.
  *
@@ -492,14 +516,17 @@ export function SelectionCard(props: SelectionCardProps) {
     const followWith = (name: string) =>
         t("selectionFollowWeb", "Follow page ({{name}})").replace("{{name}}", name);
 
-    // Parameterised by width: in the header they sit side by side at a fixed
-    // 150px, inside the gear menu they fill it.
-    const langSelect = (width = "w-[150px]") => (
-        <select
-            value={langValue}
-            onChange={(e) => onLangChange(e.target.value)}
-            title={t("targetLanguage", "Target language")}
-            className={`${SELECT_CLS} ${width}`}
+    const followingPage = !prefs.multiService && serviceValue === '' && langValue === '';
+    const selectedService = serviceOptions.find(option => option.value === (serviceValue || selectedServices[0]));
+    const selectedLang = LANGUAGES.find(language => language.value === langValue);
+
+    // The controls show concrete values. The native menu still explicitly
+    // names its follow-page option so it remains selectable independently.
+    const langSelect = (width = "w-[100px]") => (
+        <SelectionPicker
+            value={langValue} onChange={onLangChange} label={t("targetLanguage", "Target language")}
+            display={langValue ? selectedLang ? t(selectedLang.title, selectedLang.name) : langValue : followLangLabel}
+            width={width}
         >
             <option value="">{followWith(followLangLabel)}</option>
             {LANGUAGES.map((l) => (
@@ -507,15 +534,14 @@ export function SelectionCard(props: SelectionCardProps) {
                     {t(l.title, l.name)}
                 </option>
             ))}
-        </select>
+        </SelectionPicker>
     );
 
-    const singleServiceSelect = (width = "w-[150px]") => (
-        <select
-            value={serviceValue}
-            onChange={(e) => onServiceChange(e.target.value)}
-            title={t("translateService", "Translate service")}
-            className={`${SELECT_CLS} ${width}`}
+    const singleServiceSelect = (width = "w-[118px]") => (
+        <SelectionPicker
+            value={serviceValue} onChange={onServiceChange} label={t("translateService", "Translate service")}
+            display={serviceValue ? selectedService ? serviceName(selectedService) : serviceValue : followServiceLabel}
+            width={width} iconId={selectedService?.iconId ?? 'custom'}
         >
             {/* Dropped in multi-service mode: the chosen SET is the answer, and
                 "follow the page" is a single value with nothing to add to it. */}
@@ -525,7 +551,7 @@ export function SelectionCard(props: SelectionCardProps) {
                     {serviceName(o)}
                 </option>
             ))}
-        </select>
+        </SelectionPicker>
     );
 
     /**
@@ -590,40 +616,50 @@ export function SelectionCard(props: SelectionCardProps) {
                     // ball, which is where this constant comes from.
                     dangerouslySetInnerHTML={{ __html: FLUENTO_LOGO_SVG }}
                 />
-                {!prefs.hideHeaderConfig && (
-                    <>
-                        {prefs.multiService ? (
-                            <span className="relative inline-flex min-w-0">
-                                <button
-                                    type="button"
-                                    onClick={() => setServiceListOpen((v) => !v)}
-                                    // The full set on hover — the label itself
-                                    // is the truncated half of the same thing.
-                                    title={`${t("translateService", "Translate service")}: ${selectedServiceNames}`}
-                                    aria-expanded={serviceListOpen}
-                                    className={`${SELECT_CLS} w-[150px] flex items-center justify-between gap-1 text-left`}
-                                >
-                                    <span className="min-w-0 truncate">{selectedServiceNames}</span>
-                                    <ChevronRight
-                                        className={`h-3 w-3 shrink-0 transition-transform ${serviceListOpen ? "rotate-90" : ""}`}
-                                    />
-                                </button>
-                                {serviceListOpen && (
-                                    <HeaderMenu align="left">
-                                        <ServiceChecklist
-                                            options={serviceOptions}
-                                            selected={selectedServices}
-                                            onToggle={onToggleService}
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                    {!prefs.hideHeaderConfig && (
+                        <>
+                            {prefs.multiService ? (
+                                <span className="relative inline-flex min-w-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setServiceListOpen((v) => !v)}
+                                        // The full set on hover — the label itself
+                                        // is the truncated half of the same thing.
+                                        title={`${t("translateService", "Translate service")}: ${selectedServiceNames}`}
+                                        aria-expanded={serviceListOpen}
+                                        className={`${SELECT_CLS} w-[150px] flex items-center justify-between gap-1 text-left`}
+                                    >
+                                        <span className="min-w-0 truncate">{selectedServiceNames}</span>
+                                        <ChevronRight
+                                            className={`h-3 w-3 shrink-0 transition-transform ${serviceListOpen ? "rotate-90" : ""}`}
                                         />
-                                    </HeaderMenu>
-                                )}
-                            </span>
-                        ) : (
-                            singleServiceSelect()
-                        )}
-                        {langSelect()}
-                    </>
-                )}
+                                    </button>
+                                    {serviceListOpen && (
+                                        <HeaderMenu align="left">
+                                            <ServiceChecklist
+                                                options={serviceOptions}
+                                                selected={selectedServices}
+                                                onToggle={onToggleService}
+                                            />
+                                        </HeaderMenu>
+                                    )}
+                                </span>
+                            ) : (
+                                singleServiceSelect()
+                            )}
+                            <ArrowLeftRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink-soft" />
+                            {langSelect()}
+                        </>
+                    )}
+                    {followingPage && (
+                        <span role="status" title={t("popupFollowPageHint", "Use the webpage engine and target language without changing webpage settings")}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-hover-2 px-2 py-0.5 text-[10px] text-ink-soft">
+                            <Link2 aria-hidden="true" className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{t("popupFollowPage", "Follow webpage settings")}</span>
+                        </span>
+                    )}
+                </div>
                 <div className="flex items-center gap-0.5 shrink-0 ml-auto">
                     {prefs.hideHeaderConfig && (
                         <span className="relative inline-flex">

@@ -65,6 +65,12 @@
   color: var(--color-ink);
 }
 
+.fluento-selection-engine-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* Source/result badges in selection translation. Text measurement lives in
  * the adjacent flex child so the badge never overlaps text or action buttons. */
 .fluento-selection-label {
