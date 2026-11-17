@@ -2,6 +2,7 @@ import { alignSentenceBlocks, splitSentence, wrapTextNode2Span } from "@/main/do
 import { TAB_ACTION, TRANSLATE_STATUS_KEY, CONFIG_KEY, DB_ACTION, TRANSLATE_SERVICE, DOMAIN_STRATEGY, TRANSLATE_ACTION, ACTION, STORAGE_ACTION, VIEW_STRATEGY, DEFAULT_STRATEGY, ELEMENT_STATUS, APP_NAME, APP_NAME_WITH_SUFFIX, DEFAULT_VALUE, STATUS_SUCCESS, CONFIG_VALUE_TO_KEY, LANGUAGES_MAP, IS_FIREFOX, browserTargetLanguage, FLOAT_BALL_STYLE, EXTENSION_INVALID_CONTEXT_MSG, STYLE_BLUR, TRANSLATING_ANIMATION, IS_MAC } from "./constants";
 import { restore, translateParams, getTranslateResult, translate, TranslateResult, detectTextsLanguages } from "./translateClient";
 import { buildNoTranslateLanguageSet, isNoTranslateLanguage } from "./noTranslateLanguage";
+import { PageTranslationQueue, batchPageUnits } from './pageTranslationQueue';
 import {
     needsCompanionDetect,
     partitionByLocalLanguage,
@@ -554,12 +555,15 @@ export async function content() {
     let siteRuleStyleSheet: CSSStyleSheet | null = null
     let siteRuleStyleElement: HTMLStyleElement | null = null
 
+    const pageTranslationQueue = new PageTranslationQueue(2);
     let batchElements: UnitContainer[] = [];
     let batchTimer: NodeJS.Timeout | null = null
     const pendingTranslateParagraphElementsTask: Set<Promise<void>> = new Set()
     let translateTask: Promise<void> | null = null
     let restoreOriginalTask: Promise<void> | null = null
-    let controller: AbortController | null = null
+    // Auto-translation also starts requests, before translateAction ever runs.
+    // It must own a cancellable session just like a manually started page.
+    let controller = new AbortController()
     const MARK_BUDGET_MS = 20;
     const MARK_MAX_DEPTH = 50;
     // get the id of the current tab,which used unique defines the page
@@ -867,40 +871,27 @@ export async function content() {
     const ROOT_COMPACT_THRESHOLD = 32;
     let forgottenRootCount = 0;
 
+    function handleSourceTextMutation(target: Text) {
+        if (ignoreMutationElements.has(target)) return
+        const p = closestNeedsTranslate(target.parentNode)
+        if (!p || isIgnoreMutationElement(p)) return
+        const text = target.textContent
+        const translated = bilingualTranslatedElementMap.has(p) || translatedElementMap.has(p)
+        void restoreOriginalParagraphElement(p).then(() => {
+            if (target.textContent !== text) {
+                ignoreMutationElements.add(target)
+                target.textContent = text
+                queueMicrotask(() => ignoreMutationElements.delete(target))
+            }
+            if (translated && globalSwitch) void translateParagraphElements([p])
+        })
+    }
+
     //#region observer
     const observer = new MutationObserver(async mutations => {
         for (const mutation of mutations) {
             if (mutation.type === 'characterData') {
-                // continue
-                if (mutation.target.nodeType !== Node.TEXT_NODE) continue
-                let target = mutation.target as Text
-                if (ignoreMutationElements.has(target)) continue
-                // return
-                // if (target.length <= 5) continue // for debug
-                // console.debug('characterData', mutation);
-                // parentNode, not parentElement: a text node directly under a
-                // ShadowRoot has no parent element, and the mutation would be
-                // dropped before the walk even started.
-                let p = closestNeedsTranslate(target.parentNode)
-                if (!p) continue
-                if (isIgnoreMutationElement(p)) continue
-
-                let text = target.textContent
-
-                let translateStatus = bilingualTranslatedElementMap.has(p) || translatedElementMap.has(p)
-                restoreOriginalParagraphElement(p).then(() => {
-                    // probably get old original text
-                    if (target.textContent != text) {
-                        ignoreMutationElements.add(target)
-                        target.textContent = text
-                        Promise.resolve().then(() => {
-                            ignoreMutationElements.delete(target)
-                        })
-                    }
-                    if (translateStatus) {
-                        translateParagraphElements([p])
-                    }
-                })
+                if (mutation.target.nodeType === Node.TEXT_NODE) handleSourceTextMutation(mutation.target as Text)
                 continue
             }
             // A ShadowRoot is a valid mutation target (we observe each root
@@ -939,7 +930,7 @@ export async function content() {
 
     const intersectionObserver = new IntersectionObserver(items => {
         // console.debug("intersectionObserver items: ", items.length)
-        if (!translateStatus) {
+        if (!globalSwitch || !translateStatus) {
             return
         }
         for (const item of items) {
@@ -2046,6 +2037,7 @@ export async function content() {
      * Execute init function when page is loaded
      */
     async function init() {
+        if (controller.signal.aborted) controller = new AbortController()
         initCSS()
         // The float ball is a single tab-level UI — top frame only.
         if (isTopFrame) await initFloatBall()
@@ -2112,6 +2104,15 @@ export async function content() {
      * Execute unload function when turning off global switch
      */
     async function unload() {
+        // Stop collection and cancel both active and unsent work before any
+        // await or DOM restoration. Re-enabling creates a fresh session.
+        controller.abort()
+        if (batchTimer) clearTimeout(batchTimer)
+        batchTimer = null
+        batchElements = []
+        intersectionObserver.disconnect()
+        resetObserveTargets()
+        clearTranslateIndicators()
         removeCSS()
         domObserved = false
         observer.disconnect()
@@ -2124,7 +2125,8 @@ export async function content() {
         videoSubtitle = null
         minimalPlayerUi?.destroy()
         minimalPlayerUi = null
-        restoreOriginalPage(true, true)
+        await Promise.allSettled(pendingTranslateParagraphElementsTask)
+        await restoreOriginalPage(true, true)
     }
 
     /**
@@ -2766,7 +2768,9 @@ export async function content() {
 
             if (batchTimer) {
                 clearTimeout(batchTimer)
+                batchTimer = null
             }
+            batchElements = []
             if (controller) {
                 controller.abort()
                 await Promise.allSettled(pendingTranslateParagraphElementsTask)
@@ -3745,7 +3749,33 @@ export async function content() {
          */
         replacements?: Map<TranslationUnit, UnitReplacement>,
     ) {
-        let viewStrategyCopy = viewStrategy
+        const snapshot = { service: translateService, targetLanguage, viewStrategy, signal: controller?.signal };
+        const priority = (units: TranslationUnit[]) => Math.min(...units.map(unit => {
+            const element = unit.container instanceof ShadowRoot ? unit.container.host : unit.container;
+            if (!element.isConnected) return Infinity;
+            const rect = element.getBoundingClientRect();
+            if (rect.bottom >= 0 && rect.top <= window.innerHeight) return 0;
+            return rect.top > window.innerHeight ? rect.top - window.innerHeight : -rect.bottom;
+        }));
+        const batches = batchPageUnits(allUnits, unit => unit.container, unit => unitSourceText(unit).length);
+        batches.sort((a, b) => priority(a) - priority(b));
+        await Promise.allSettled(batches.map(batch => pageTranslationQueue.run(async () => {
+            if (!globalSwitch || snapshot.signal?.aborted) return;
+            await translateUnitBatch(batch, context, errorScope, replacements, snapshot);
+        }, () => priority(batch), snapshot.signal)));
+    }
+
+    async function translateUnitBatch(
+        allUnits: TranslationUnit[], context: any, errorScope: ERROR_SCOPE_VALUE,
+        replacements: Map<TranslationUnit, UnitReplacement> | undefined,
+        snapshot: { service: string; targetLanguage: string; viewStrategy: VIEW_STRATEGY; signal?: AbortSignal },
+    ) {
+        const translateService = snapshot.service;
+        const targetLanguage = snapshot.targetLanguage;
+        const viewStrategyCopy = snapshot.viewStrategy;
+        const signal = snapshot.signal;
+        if (signal?.aborted) return;
+        allUnits = allUnits.filter(unit => unit.container.isConnected);
         // Every page shadow root discovered so far gets its stylesheet now.
         // This is the guarantee the marking scan deliberately stops making at
         // its chunk boundaries (see the note there): the scan streams containers
@@ -3790,25 +3820,63 @@ export async function content() {
         // make room, and applying them first means one reflow instead of a
         // visible clip-then-unclip.
         syncSiteRuleCss(true)
-        let ignoreElements: Node[] = []
-        let indicator: TranslateIndicatorSession | null = null
+        const mutationGuards = new Map<UnitContainer, Set<Node>>();
+        const settledSourceTexts = new Map<UnitContainer, Map<Text, string>>();
+        const pendingUnits = new Map<UnitContainer, number>();
+        for (const unit of units) pendingUnits.set(unit.container, (pendingUnits.get(unit.container) ?? 0) + 1);
+        const sharedContainers = new Set([...pendingUnits].filter(([, count]) => count > 1).map(([container]) => container));
+        const indicators = new Map<TranslationUnit, TranslateIndicatorSession>();
+        const staleContainers = new Set<UnitContainer>();
+        const guardMutation = (container: UnitContainer, node: Node) => {
+            const nodes = mutationGuards.get(container) ?? new Set<Node>();
+            nodes.add(node);
+            mutationGuards.set(container, nodes);
+            ignoreMutationElements.add(node);
+        };
+        const releaseMutationGuards = (container: UnitContainer) => {
+            const nodes = mutationGuards.get(container);
+            if (!nodes) return;
+            // Forget ownership now so this batch's final cleanup cannot clear
+            // guards acquired by a subsequent translation of this container.
+            mutationGuards.delete(container);
+            const settled = settledSourceTexts.get(container);
+            settledSourceTexts.delete(container);
+            queueMicrotask(() => {
+                for (const node of nodes) ignoreMutationElements.delete(node);
+                if (signal?.aborted || !globalSwitch) return;
+                // Mixed containers retain their guard for sibling units. Replay
+                // source edits to completed units that happened during that wait.
+                for (const [node, text] of settled ?? []) {
+                    if (node.isConnected && node.textContent !== text) handleSourceTextMutation(node);
+                }
+                const needsRescan = staleContainers.delete(container)
+                    || sharedContainers.has(container) && pendingUnits.get(container) === 0;
+                // Successful mixed containers also need a scan for child-list
+                // changes (new/replaced source nodes) suppressed during the wait.
+                if (needsRescan && container.isConnected) {
+                    unobserveContainer(intersectionObserver, container);
+                    pendingMarkRoots.add(container);
+                    scheduleMutationProcess();
+                }
+            });
+        };
         // Set when the batch failed and the indicator now owns its markers, so
         // the `finally` below does not take them straight back down again.
         let indicatorFailed = false
         try {
             // Guard the containers, deduplicated — several units may share one.
             for (const container of new Set(units.map(u => u.container))) {
-                ignoreElements.push(container)
-                ignoreMutationElements.add(container)
+                guardMutation(container, container)
             }
             // Started INSIDE the guard on purpose: an inline marker is a real
             // insertion into a translation container, and an unguarded one would
             // queue a mutation that re-scans the very paragraph being
             // translated. (The markers themselves are invisible to segmentation,
             // ranges and serialization — see isTranslateIndicator.)
-            indicator = beginTranslateIndicator(units, (retryUnits) => {
-                retryTranslateUnits(retryUnits, errorScope)
-            })
+            for (const unit of units) {
+                const indicator = beginTranslateIndicator([unit], retryUnits => retryTranslateUnits(retryUnits, errorScope));
+                if (indicator) indicators.set(unit, indicator);
+            }
             let service = translateService
             if (context && typeof context.targetTranslateService === "string" && context.targetTranslateService) {
                 service = context.targetTranslateService
@@ -3843,274 +3911,308 @@ export async function content() {
             const companionUnits = filterLanguages && needsCompanionDetect(service)
                 ? undeterminedUnits
                 : []
-            const [translateResults, companionLangs] = await Promise.all([
-                getTranslateResult(service, units, targetLanguage, viewStrategyCopy, controller?.signal, sourceTextOf),
-                companionUnits.length > 0
-                    ? detectTextsLanguages(companionUnits.map(unitSourceText), controller?.signal)
-                    : Promise.resolve<string[]>([]),
-            ])
-            if (!translateResults || translateResults.length === 0) {
-                return
-            }
-
-            if (filterLanguages) {
-                const companionLangOf = new Map<TranslationUnit, string>()
-                companionUnits.forEach((unit, i) => companionLangOf.set(unit, companionLangs[i] ?? ""))
-                const excluded: TranslationUnit[] = []
-                for (let i = translateResults.length - 1; i >= 0; i--) {
-                    const result = translateResults[i]
-                    const unit = result.unit
-                    // Re-translations stay exempt on this side too, for the same
-                    // reason they were exempt from the local pass.
-                    if (!unit || replacements?.has(unit)) continue
-                    // On the per-text path the reply carries an answer for
-                    // EVERY unit, including ones franc already cleared — it is
-                    // free and better informed, so it wins over the local guess
-                    // (and replaces it in the memo).
-                    const lang = needsCompanionDetect(service) ? companionLangOf.get(unit) : result.sourceLang
-                    if (!rejectByDetectedLanguage(unitSourceText(unit), lang, noTranslateLanguages)) continue
-                    excluded.push(unit)
-                    translateResults.splice(i, 1)
+            const sources = new Map(units.map(unit => [unit,
+                getTextNodesAndTextOfNodes(unit.nodes).textNodes.map(node => ({ node, text: node.textContent })),
+            ]));
+            const companion = companionUnits.length > 0
+                ? detectTextsLanguages(companionUnits.map(unitSourceText), signal)
+                : Promise.resolve<string[]>([]);
+            const commitResults = async (result: TranslateResult) => {
+                const companionLangs = await companion;
+                const unit = result.unit!;
+                // Never overwrite a page edit or a restored/cancelled session.
+                if (signal?.aborted || !unit.container.isConnected) return;
+                if (sources.get(unit)?.some(({ node, text }) => !node.isConnected || node.textContent !== text)) {
+                    staleContainers.add(unit.container);
+                    return;
                 }
-                settleLanguageFilteredContainers(
-                    excluded,
-                    translateResults.map(r => r.unit).filter((u): u is TranslationUnit => !!u),
-                )
+                const translateResults = [result];
+
+                if (filterLanguages) {
+                    const companionLangOf = new Map<TranslationUnit, string>()
+                    companionUnits.forEach((unit, i) => companionLangOf.set(unit, companionLangs[i] ?? ""))
+                    const excluded: TranslationUnit[] = []
+                    for (let i = translateResults.length - 1; i >= 0; i--) {
+                        const result = translateResults[i]
+                        const unit = result.unit
+                        // Re-translations stay exempt on this side too, for the same
+                        // reason they were exempt from the local pass.
+                        if (!unit || replacements?.has(unit)) continue
+                        // On the per-text path the reply carries an answer for
+                        // EVERY unit, including ones franc already cleared — it is
+                        // free and better informed, so it wins over the local guess
+                        // (and replaces it in the memo).
+                        const lang = needsCompanionDetect(service) ? companionLangOf.get(unit) : result.sourceLang
+                        if (!rejectByDetectedLanguage(unitSourceText(unit), lang, noTranslateLanguages)) continue
+                        excluded.push(unit)
+                        translateResults.splice(i, 1)
+                    }
+                    settleLanguageFilteredContainers(
+                        excluded,
+                        translateResults.map(r => r.unit).filter((u): u is TranslationUnit => !!u),
+                    )
+                    if (translateResults.length === 0) {
+                        return
+                    }
+                }
+
+                // remove the unit whose language is same as targetLanguage
+                for (let i = translateResults.length - 1; i >= 0; i--) {
+                    let result = translateResults[i]
+                    if (result.sourceLang == targetLanguage && result.score >= 0.7) {
+                        translateResults.splice(i, 1)
+                        continue
+                    }
+                    result.textNodes?.forEach(text => {
+                        guardMutation(result.unit!.container, text)
+                    })
+                }
                 if (translateResults.length === 0) {
                     return
                 }
-            }
 
-            // remove the unit whose language is same as targetLanguage
-            for (let i = translateResults.length - 1; i >= 0; i--) {
-                let result = translateResults[i]
-                if (result.sourceLang == targetLanguage && result.score >= 0.7) {
-                    translateResults.splice(i, 1)
-                    continue
-                }
-                result.textNodes?.forEach(text => {
-                    ignoreElements.push(text)
-                    ignoreMutationElements.add(text)
-                })
-            }
-            if (translateResults.length === 0) {
-                return
-            }
-
-            // SINGLE is about to overwrite these nodes, so this is the last
-            // moment their source content exists anywhere. For a unit that is
-            // itself a re-translation the live content is already ours — the
-            // resolver, not the DOM, is the source of truth.
-            const sourceBefore = new Map<Text, string>()
-            if (viewStrategyCopy == VIEW_STRATEGY.SINGLE) {
-                for (const result of translateResults) {
-                    result.textNodes?.forEach(node => {
-                        sourceBefore.set(node, sourceTextOf?.(node) ?? node.textContent ?? "")
-                    })
-                }
-            }
-
-            // the elements will be replaced(translated) in single view strategy
-            // the copy of elements will be replaced(translated) in double view strategy
-            await translate(translateService, translateResults)
-
-            // Containers that actually received a translation this round.
-            const translatedContainers = new Set<UnitContainer>()
-
-            if (viewStrategyCopy == VIEW_STRATEGY.SINGLE) {
-                for (const result of translateResults) {
-                    const element = result.unit?.container
-                    if (!element) continue
-                    // Every node now holding our output, with what it used to
-                    // say. Nodes the write-back minted map to "" — they carry
-                    // no source but must still be cleared next time round.
-                    const sourceText = new Map<Text, string>()
-                    result.replacedTextNodes?.forEach(node => {
-                        sourceText.set(node, sourceBefore.get(node) ?? "")
-                    })
-                    result.sourceText = sourceText
-                    const superseded = result.unit ? replacements?.get(result.unit)?.single : undefined
-                    let elementResults = translatedElementMap.get(element) ?? []
-                    if (superseded) elementResults = elementResults.filter(r => r !== superseded)
-                    elementResults.push(result)
-                    translatedElementMap.set(element, elementResults)
-                    translatedContainers.add(element)
-                }
-            }
-
-            // append translated copy element to original element in double view strategy
-            if (viewStrategyCopy == VIEW_STRATEGY.DOUBLE) {
-                // Group per container: one bookkeeping entry and one highlight
-                // binding per container, which then resolves the pointer against
-                // every record's sentence ranges.
-                const resultsByContainer = new Map<UnitContainer, TranslateResult[]>()
-                for (const result of translateResults) {
-                    const element = result.unit?.container
-                    if (!element || !result.translatedCopyElement) continue
-                    const list = resultsByContainer.get(element) ?? []
-                    list.push(result)
-                    resultsByContainer.set(element, list)
-                }
-                for (const [element, containerResults] of resultsByContainer) {
-                    // Records of units translated in earlier rounds are kept —
-                    // this round appends, never overwrites.
-                    const records: BilingualUnitRecord[] = bilingualTranslatedElementMap.get(element) ?? []
-                    let insertedAny = false
-                    let highlightedAny = false
-                    // Fallback path only: fluento-sequence must stay unique within
-                    // the container, so continue numbering after the spans of
-                    // earlier rounds. (The Highlight-API path pairs by array
-                    // index inside each record and needs no shared counter.)
-                    let sequenceOffset = 0
-                    if (!highlightApiSupported) {
-                        for (const span of element.querySelectorAll('fluento-span[fluento-sequence]')) {
-                            if (closestParagraph(span) !== element) continue
-                            const seq = parseInt(span.getAttribute('fluento-sequence')!)
-                            if (!isNaN(seq) && seq >= sequenceOffset) sequenceOffset = seq + 1
-                        }
+                // SINGLE is about to overwrite these nodes, so this is the last
+                // moment their source content exists anywhere. For a unit that is
+                // itself a re-translation the live content is already ours — the
+                // resolver, not the DOM, is the source of truth.
+                const sourceBefore = new Map<Text, string>()
+                if (viewStrategyCopy == VIEW_STRATEGY.SINGLE) {
+                    for (const result of translateResults) {
+                        result.textNodes?.forEach(node => {
+                            sourceBefore.set(node, sourceTextOf?.(node) ?? node.textContent ?? "")
+                        })
                     }
-                    for (const result of containerResults) {
-                        const unit = result.unit!
-                        const translatedElement = result.translatedCopyElement!
-                        // The unit's last text-bearing node is the insertion anchor.
-                        let lastChild: ChildNode | null = null
-                        for (let j = unit.nodes.length - 1; j >= 0; j--) {
-                            if (isContainsValidTextElement(unit.nodes[j])) {
-                                lastChild = unit.nodes[j]
-                                break
+                }
+
+                // the elements will be replaced(translated) in single view strategy
+                // the copy of elements will be replaced(translated) in double view strategy
+                await translate(service, translateResults)
+
+                // Containers that actually received a translation this round.
+                const translatedContainers = new Set<UnitContainer>()
+
+                if (viewStrategyCopy == VIEW_STRATEGY.SINGLE) {
+                    for (const result of translateResults) {
+                        const element = result.unit?.container
+                        if (!element) continue
+                        // Every node now holding our output, with what it used to
+                        // say. Nodes the write-back minted map to "" — they carry
+                        // no source but must still be cleared next time round.
+                        const sourceText = new Map<Text, string>()
+                        result.replacedTextNodes?.forEach(node => {
+                            sourceText.set(node, sourceBefore.get(node) ?? "")
+                        })
+                        result.sourceText = sourceText
+                        const superseded = result.unit ? replacements?.get(result.unit)?.single : undefined
+                        let elementResults = translatedElementMap.get(element) ?? []
+                        if (superseded) elementResults = elementResults.filter(r => r !== superseded)
+                        elementResults.push(result)
+                        translatedElementMap.set(element, elementResults)
+                        translatedContainers.add(element)
+                    }
+                }
+
+                // append translated copy element to original element in double view strategy
+                if (viewStrategyCopy == VIEW_STRATEGY.DOUBLE) {
+                    // Group per container: one bookkeeping entry and one highlight
+                    // binding per container, which then resolves the pointer against
+                    // every record's sentence ranges.
+                    const resultsByContainer = new Map<UnitContainer, TranslateResult[]>()
+                    for (const result of translateResults) {
+                        const element = result.unit?.container
+                        if (!element || !result.translatedCopyElement) continue
+                        const list = resultsByContainer.get(element) ?? []
+                        list.push(result)
+                        resultsByContainer.set(element, list)
+                    }
+                    for (const [element, containerResults] of resultsByContainer) {
+                        // Records of units translated in earlier rounds are kept —
+                        // this round appends, never overwrites.
+                        const records: BilingualUnitRecord[] = bilingualTranslatedElementMap.get(element) ?? []
+                        let insertedAny = false
+                        let highlightedAny = false
+                        // Fallback path only: fluento-sequence must stay unique within
+                        // the container, so continue numbering after the spans of
+                        // earlier rounds. (The Highlight-API path pairs by array
+                        // index inside each record and needs no shared counter.)
+                        let sequenceOffset = 0
+                        if (!highlightApiSupported) {
+                            for (const span of element.querySelectorAll('fluento-span[fluento-sequence]')) {
+                                if (closestParagraph(span) !== element) continue
+                                const seq = parseInt(span.getAttribute('fluento-sequence')!)
+                                if (!isNaN(seq) && seq >= sequenceOffset) sequenceOffset = seq + 1
                             }
                         }
-                        // Unit nodes may have been detached while awaiting the
-                        // provider — skip; that mutation requeues a scan.
-                        if (!lastChild || lastChild.parentNode !== element) continue
-                        // A unit the page grew: the translation it supersedes
-                        // comes down only HERE, with its replacement in hand, so
-                        // the page never shows the untranslated original in
-                        // between. Before the `next` probe, which would
-                        // otherwise read the old pair as "already translated".
-                        const superseded = replacements?.get(unit)?.bilingual
-                        if (superseded) dropBilingualRecord(element, records, superseded)
-                        // Already carries a translation (concurrent round) — skip.
-                        // Stepping over our own translating indicator, which is
-                        // sitting exactly here while this batch is in flight.
-                        const next = siblingSkippingIndicators(lastChild.nextSibling, "next") as HTMLElement | null
-                        if (next?.classList?.contains("fluento-divide") || next?.classList?.contains("fluento-translation")) continue
+                        for (const result of containerResults) {
+                            const unit = result.unit!
+                            const translatedElement = result.translatedCopyElement!
+                            // The unit's last text-bearing node is the insertion anchor.
+                            let lastChild: ChildNode | null = null
+                            for (let j = unit.nodes.length - 1; j >= 0; j--) {
+                                if (isContainsValidTextElement(unit.nodes[j])) {
+                                    lastChild = unit.nodes[j]
+                                    break
+                                }
+                            }
+                            // Unit nodes may have been detached while awaiting the
+                            // provider — skip; that mutation requeues a scan.
+                            if (!lastChild || lastChild.parentNode !== element) continue
+                            // A unit the page grew: the translation it supersedes
+                            // comes down only HERE, with its replacement in hand, so
+                            // the page never shows the untranslated original in
+                            // between. Before the `next` probe, which would
+                            // otherwise read the old pair as "already translated".
+                            const superseded = replacements?.get(unit)?.bilingual
+                            if (superseded) dropBilingualRecord(element, records, superseded)
+                            // Already carries a translation (concurrent round) — skip.
+                            // Stepping over our own translating indicator, which is
+                            // sitting exactly here while this batch is in flight.
+                            const next = siblingSkippingIndicators(lastChild.nextSibling, "next") as HTMLElement | null
+                            if (next?.classList?.contains("fluento-divide") || next?.classList?.contains("fluento-translation")) continue
 
-                        // Capture the unit's anchors BEFORE inserting our nodes,
-                        // so the record's range brackets the unit (and the
-                        // translation we are about to put inside it).
-                        const range = unitRangeOf(unit)
-                        const originalTextResult = getTextNodesAndTextOfNodes(unit.nodes)
-                        if (!highlightApiSupported) {
-                            // Only the <fluento-span> fallback rewrites these nodes;
-                            // the Highlight-API path is read-only, so it needs no
-                            // mutation guard on them.
-                            originalTextResult.textNodes.forEach(textNode => {
-                                ignoreElements.push(textNode)
-                                ignoreMutationElements.add(textNode)
-                            })
-                        }
-                        translatedElement.classList.add("fluento-translation")
-                        let divide: HTMLElement
-                        if (originalTextResult.text.length >= translationLineBreakMinChars) {
-                            divide = document.createElement('br')
-                            divide.classList.add("fluento-divide")
-                        } else {
-                            divide = document.createElement('span')
-                            divide.classList.add("fluento-divide")
-                            divide.innerHTML = '&nbsp;&nbsp;'
-                        }
-                        if (lastChild.nextSibling) {
-                            element.insertBefore(translatedElement, lastChild.nextSibling)
-                            element.insertBefore(divide, lastChild.nextSibling)
-                        } else {
-                            element.appendChild(divide)
-                            element.appendChild(translatedElement)
-                        }
-                        insertedAny = true
-                        const record: BilingualUnitRecord = {
-                            range, translation: translatedElement, divide, sentences: null, texts: [],
-                            // Captured above, before anything was inserted — the
-                            // run's own source nodes, which is what makes this
-                            // record findable again on a later scan.
-                            covered: originalTextResult.textNodes,
-                        }
-                        records.push(record)
+                            // Capture the unit's anchors BEFORE inserting our nodes,
+                            // so the record's range brackets the unit (and the
+                            // translation we are about to put inside it).
+                            const range = unitRangeOf(unit)
+                            const originalTextResult = getTextNodesAndTextOfNodes(unit.nodes)
+                            if (!highlightApiSupported) {
+                                // Only the <fluento-span> fallback rewrites these nodes;
+                                // the Highlight-API path is read-only, so it needs no
+                                // mutation guard on them.
+                                originalTextResult.textNodes.forEach(textNode => {
+                                    guardMutation(element, textNode)
+                                })
+                            }
+                            translatedElement.classList.add("fluento-translation")
+                            let divide: HTMLElement
+                            if (originalTextResult.text.length >= translationLineBreakMinChars) {
+                                divide = document.createElement('br')
+                                divide.classList.add("fluento-divide")
+                            } else {
+                                divide = document.createElement('span')
+                                divide.classList.add("fluento-divide")
+                                divide.innerHTML = '&nbsp;&nbsp;'
+                            }
+                            if (lastChild.nextSibling) {
+                                element.insertBefore(translatedElement, lastChild.nextSibling)
+                                element.insertBefore(divide, lastChild.nextSibling)
+                            } else {
+                                element.appendChild(divide)
+                                element.appendChild(translatedElement)
+                            }
+                            insertedAny = true
+                            const record: BilingualUnitRecord = {
+                                range, translation: translatedElement, divide, sentences: null, texts: [],
+                                // Captured above, before anything was inserted — the
+                                // run's own source nodes, which is what makes this
+                                // record findable again on a later scan.
+                                covered: originalTextResult.textNodes,
+                            }
+                            records.push(record)
 
-                        // Bilingual sentence highlighting, gated per unit — a
-                        // unit failing the gates only loses its own sentences.
-                        if (!bilingualHighlightingSwitch) continue
-                        if (originalTextResult.text == "" || originalTextResult.textNodes.length == 0) continue
-                        const translatedTextResult = getTextNodesAndText(translatedElement)
-                        if (translatedTextResult.text == "" || translatedTextResult.textNodes.length == 0) continue
-                        const originalSentences = splitSentence(originalTextResult.text)
-                        let validOriginalSentencesLen = originalSentences.filter(s => s.trim() !== '').length;
-                        if (originalSentences.length === 0 || validOriginalSentencesLen < bilingualHighlightingMinSentences) continue
-                        const translatedSentences = splitSentence(translatedTextResult.text)
-                        // The hover pairing pairs the two sides by index, so
-                        // they must carry the same number of segments.
-                        // Machine translators keep sentence structure and pass
-                        // through unchanged; an AI provider freely merges or
-                        // splits sentences, and one mismatched count used to
-                        // drop the WHOLE unit's highlighting (the old gate was
-                        // strict equality). Mismatched sides are re-segmented
-                        // into proportional blocks instead — coarser pairing,
-                        // but the highlight survives.
-                        const aligned = alignSentenceBlocks(originalSentences, translatedSentences)
-                        if (!aligned) continue
-                        // Re-apply the minimum to the BLOCK count: when the
-                        // model merged the whole paragraph into one sentence,
-                        // the alignment collapses to a single block and the
-                        // hover would light the entire original and its whole
-                        // translation at once — the very bluntness the
-                        // min-sentences setting exists to avoid.
-                        if (aligned.original.length < bilingualHighlightingMinSentences) continue
-                        if (highlightApiSupported) {
-                            // Blank segments yield no range, so both arrays are
-                            // indexed by non-blank sentence order — equal on
-                            // both sides by construction (equal counts in, one
-                            // non-blank block out), which is what makes
-                            // pairing by index correct.
-                            const originalRanges = buildSentenceRanges(originalTextResult.textNodes, aligned.original)
-                            const translationRanges = buildSentenceRanges(translatedTextResult.textNodes, aligned.translated)
-                            if (originalRanges.length === 0 || translationRanges.length === 0) continue
-                            record.sentences = { original: originalRanges, translation: translationRanges }
-                            highlightedAny = true
-                        } else {
-                            // Fallback: wrapping empties the original text nodes,
-                            // so back them up first — this is what restore replays.
-                            originalTextResult.textNodes.forEach(textNode => {
-                                record.texts.push({ text: textNode, content: textNode.textContent })
-                            })
-                            const spans = wrapTextNode2Span(originalTextResult.textNodes, aligned.original, ignoreMutationElements, sequenceOffset)
-                            spans.push(...wrapTextNode2Span(translatedTextResult.textNodes, aligned.translated, ignoreMutationElements, sequenceOffset))
-                            sequenceOffset += aligned.original.length
-                            if (spans.length > 0) highlightedAny = true
+                            // Bilingual sentence highlighting, gated per unit — a
+                            // unit failing the gates only loses its own sentences.
+                            if (!bilingualHighlightingSwitch) continue
+                            if (originalTextResult.text == "" || originalTextResult.textNodes.length == 0) continue
+                            const translatedTextResult = getTextNodesAndText(translatedElement)
+                            if (translatedTextResult.text == "" || translatedTextResult.textNodes.length == 0) continue
+                            const originalSentences = splitSentence(originalTextResult.text)
+                            let validOriginalSentencesLen = originalSentences.filter(s => s.trim() !== '').length;
+                            if (originalSentences.length === 0 || validOriginalSentencesLen < bilingualHighlightingMinSentences) continue
+                            const translatedSentences = splitSentence(translatedTextResult.text)
+                            // The hover pairing pairs the two sides by index, so
+                            // they must carry the same number of segments.
+                            // Machine translators keep sentence structure and pass
+                            // through unchanged; an AI provider freely merges or
+                            // splits sentences, and one mismatched count used to
+                            // drop the WHOLE unit's highlighting (the old gate was
+                            // strict equality). Mismatched sides are re-segmented
+                            // into proportional blocks instead — coarser pairing,
+                            // but the highlight survives.
+                            const aligned = alignSentenceBlocks(originalSentences, translatedSentences)
+                            if (!aligned) continue
+                            // Re-apply the minimum to the BLOCK count: when the
+                            // model merged the whole paragraph into one sentence,
+                            // the alignment collapses to a single block and the
+                            // hover would light the entire original and its whole
+                            // translation at once — the very bluntness the
+                            // min-sentences setting exists to avoid.
+                            if (aligned.original.length < bilingualHighlightingMinSentences) continue
+                            if (highlightApiSupported) {
+                                // Blank segments yield no range, so both arrays are
+                                // indexed by non-blank sentence order — equal on
+                                // both sides by construction (equal counts in, one
+                                // non-blank block out), which is what makes
+                                // pairing by index correct.
+                                const originalRanges = buildSentenceRanges(originalTextResult.textNodes, aligned.original)
+                                const translationRanges = buildSentenceRanges(translatedTextResult.textNodes, aligned.translated)
+                                if (originalRanges.length === 0 || translationRanges.length === 0) continue
+                                record.sentences = { original: originalRanges, translation: translationRanges }
+                                highlightedAny = true
+                            } else {
+                                // Fallback: wrapping empties the original text nodes,
+                                // so back them up first — this is what restore replays.
+                                originalTextResult.textNodes.forEach(textNode => {
+                                    record.texts.push({ text: textNode, content: textNode.textContent })
+                                })
+                                const spans = wrapTextNode2Span(originalTextResult.textNodes, aligned.original, ignoreMutationElements, sequenceOffset)
+                                spans.push(...wrapTextNode2Span(translatedTextResult.textNodes, aligned.translated, ignoreMutationElements, sequenceOffset))
+                                sequenceOffset += aligned.original.length
+                                if (spans.length > 0) highlightedAny = true
+                            }
                         }
-                    }
-                    if (insertedAny) {
-                        bilingualTranslatedElementMap.set(element, records)
-                        translatedContainers.add(element)
-                    } else if (records.length === 0) {
-                        // Every record was superseded and none of the successors
-                        // made it in (detached nodes, a dropped echo). Leaving an
-                        // empty array behind would read as "this container is
-                        // translated" to everything that only asks `has`.
-                        bilingualTranslatedElementMap.delete(element)
-                        highlightDisposers.get(element)?.()
-                        highlightDisposers.delete(element)
-                    }
-                    if (highlightedAny) {
-                        highlightDisposers.get(element)?.()
-                        highlightDisposers.set(element, bindHighlightHandler(element))
+                        if (insertedAny) {
+                            bilingualTranslatedElementMap.set(element, records)
+                            translatedContainers.add(element)
+                        } else if (records.length === 0) {
+                            // Every record was superseded and none of the successors
+                            // made it in (detached nodes, a dropped echo). Leaving an
+                            // empty array behind would read as "this container is
+                            // translated" to everything that only asks `has`.
+                            bilingualTranslatedElementMap.delete(element)
+                            highlightDisposers.get(element)?.()
+                            highlightDisposers.delete(element)
+                        }
+                        if (highlightedAny) {
+                            highlightDisposers.get(element)?.()
+                            highlightDisposers.set(element, bindHighlightHandler(element))
+                        }
                     }
                 }
-            }
 
-            translatedContainers.forEach((element) => {
-                paragraphElementMap.set(element, ELEMENT_STATUS.TRANSLATED)
-                unobserveContainer(intersectionObserver, element)
-            })
+                translatedContainers.forEach((element) => {
+                    paragraphElementMap.set(element, ELEMENT_STATUS.TRANSLATED)
+                    unobserveContainer(intersectionObserver, element)
+                })
+            };
+            await getTranslateResult(service, units, targetLanguage, viewStrategyCopy, signal, sourceTextOf, async result => {
+                const range = result.unit ? unitRangeOf(result.unit) : undefined;
+                await commitResults(result);
+                if (result.unit && !signal?.aborted) {
+                    const container = result.unit.container;
+                    const settled = settledSourceTexts.get(container) ?? new Map<Text, string>();
+                    // Re-segment after commit: highlight fallback may have replaced
+                    // source text nodes with wrapper spans during the write.
+                    for (const unit of segmentParagraph(container).units) {
+                        const candidate = unitRangeOf(unit);
+                        if (candidate.start !== range?.start || candidate.end !== range?.end) continue;
+                        for (const node of getTextNodesAndTextOfNodes(unit.nodes).textNodes) {
+                            settled.set(node, node.textContent ?? '');
+                        }
+                    }
+                    settledSourceTexts.set(container, settled);
+                }
+                if (result.unit) {
+                    indicators.get(result.unit)?.done();
+                    indicators.delete(result.unit);
+                    const container = result.unit.container;
+                    const remaining = pendingUnits.get(container)! - 1;
+                    pendingUnits.set(container, remaining);
+                    // A mixed container can own several units. Its guard stays
+                    // until the final unit commits, not until unrelated batches finish.
+                    if (remaining === 0) releaseMutationGuards(container);
+                }
+            });
         } catch (e) {
             // The resilience boundary for page translation: one failed batch
             // must not stop the rest of the page. It stays a catch — but the
@@ -4138,8 +4240,8 @@ export async function content() {
                 })
                 // No payload means the reporter classified this as an abort (or
                 // itself failed) — nothing to show, so the markers just go.
-                if (failure && indicator) {
-                    indicator.fail(failure)
+                if (failure && indicators.size > 0) {
+                    for (const indicator of indicators.values()) indicator.fail(failure);
                     indicatorFailed = true
                 }
             }
@@ -4148,12 +4250,8 @@ export async function content() {
             // A batch that failed keeps its markers: they are now the details +
             // retry pair. Everything else — success, abort, an empty result, the
             // model-download bail — takes them down.
-            if (!indicatorFailed) indicator?.done()
-            Promise.resolve().then(() => {
-                for (let element of ignoreElements) {
-                    ignoreMutationElements.delete(element)
-                }
-            })
+            if (!indicatorFailed) for (const indicator of indicators.values()) indicator.done();
+            for (const container of mutationGuards.keys()) releaseMutationGuards(container);
         }
     }
     //#endregion

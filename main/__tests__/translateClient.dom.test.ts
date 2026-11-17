@@ -11,7 +11,8 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 // tests is the message client. abortableRequest lives in its own module
 // precisely so it can be intercepted here (a helper defined inside
 // utils/message.ts would call its own binding and escape the mock).
-const { abortStub } = vi.hoisted(() => ({ abortStub: vi.fn() }));
+const { abortStub, progressStub } = vi.hoisted(() => ({ abortStub: vi.fn(), progressStub: vi.fn() }));
+vi.mock('@/main/translationProgress', () => ({ requestTranslationProgress: progressStub }));
 vi.mock("@/utils/abortableRequest", () => ({ abortableRequest: abortStub }));
 vi.mock("@/utils/message", () => ({
     sendMessageToBackground: vi.fn(),
@@ -44,6 +45,58 @@ function registerFake(fn: (texts: string[]) => TranslateResult[]) {
 beforeEach(() => {
     vi.clearAllMocks();
     document.body.innerHTML = "";
+});
+
+describe('progressive paragraph results', () => {
+    it('commits a later paragraph before an earlier slow one, without duplicate final commits', async () => {
+        document.body.innerHTML = '<p>first paragraph</p><p>second paragraph</p>';
+        const elements = [...document.querySelectorAll('p')];
+        let finish!: () => void;
+        progressStub.mockImplementation(async (_request, _signal, _timeout, progress) => {
+            progress(1, new TranslateResult('第二段', 'en', 1));
+            await new Promise<void>(resolve => { finish = resolve; });
+            return [new TranslateResult('第一段', 'en', 1), new TranslateResult('第二段', 'en', 1)];
+        });
+        const committed: string[] = [];
+        const pending = getTranslateResult('fake', elements, 'zh-CN', VIEW_STRATEGY.SINGLE, undefined, undefined,
+            async result => { await translate('fake', [result]); committed.push(result.translatedMappedHtmlText); });
+        await vi.waitFor(() => expect(elements[1].textContent).toBe('第二段'));
+        expect(elements[0].textContent).toBe('first paragraph');
+        finish(); await pending;
+        expect(committed).toEqual(['第二段', '第一段']);
+        expect(elements[0].textContent).toBe('第一段');
+    });
+    it('keeps completed paragraphs when a later item fails', async () => {
+        document.body.innerHTML = '<p>first</p><p>second</p>';
+        progressStub.mockImplementation(async (_request, _signal, _timeout, progress) => {
+            progress(0, new TranslateResult('第一段', 'en', 1));
+            throw Error('second failed');
+        });
+        const committed = vi.fn(async () => {});
+        await expect(getTranslateResult('fake', [...document.querySelectorAll('p')], 'zh-CN', VIEW_STRATEGY.DOUBLE,
+            undefined, undefined, committed)).rejects.toThrow('second failed');
+        expect(committed).toHaveBeenCalledTimes(1);
+        expect(committed).toHaveBeenCalledWith(expect.objectContaining({ translatedMappedHtmlText: '第一段' }));
+    });
+    it('does not commit queued results after cancellation', async () => {
+        document.body.innerHTML = '<p>first</p>';
+        const controller = new AbortController();
+        progressStub.mockImplementation(async (_request, _signal, _timeout, progress) => {
+            progress(0, new TranslateResult('第一段', 'en', 1));
+            controller.abort();
+            return [new TranslateResult('第一段', 'en', 1)];
+        });
+        const committed = vi.fn(async () => {});
+        await getTranslateResult('fake', [...document.querySelectorAll('p')], 'zh-CN', VIEW_STRATEGY.DOUBLE,
+            controller.signal, undefined, committed);
+        expect(committed).not.toHaveBeenCalled();
+    });
+    it('surfaces commit failures instead of reporting an empty success', async () => {
+        document.body.innerHTML = '<p>first</p>';
+        progressStub.mockImplementation(async () => [new TranslateResult('第一段', 'en', 1)]);
+        await expect(getTranslateResult('fake', [...document.querySelectorAll('p')], 'zh-CN', VIEW_STRATEGY.DOUBLE,
+            undefined, undefined, async () => { throw Error('commit failed'); })).rejects.toThrow('commit failed');
+    });
 });
 
 // ---------------------------------------------------------------------------

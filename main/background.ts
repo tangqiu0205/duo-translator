@@ -19,7 +19,8 @@ import { Browser, browser } from "wxt/browser";
 import type { InterfaceLang } from "@/main/constants";
 import { INTERFACE_LOCALES, detectInterfaceLang, normalizeInterfaceLang } from "@/utils/interfaceLang";
 import { aiMessageHandlers, registerAiBridge } from "@/main/aiService";
-import { translateMessageHandlers } from "@/main/translateService";
+import { translateMessageHandlers, translateTextsWithCache } from "@/main/translateService";
+import { registerTranslationProgress } from "@/main/translationProgress";
 import { registerSiteRuleAlarms, siteRuleMessageHandlers } from "@/main/siteRules/siteRuleService";
 import { dictMessageHandlers } from "@/main/dict/dictService";
 import { getDomainWithPortFromUrl } from '@/utils/url';
@@ -83,6 +84,9 @@ export async function background() {
     // AI Writing streaming bridge (runtime.onConnect). Same first-synchronous-
     // turn requirement as the listeners above.
     registerAiBridge();
+    registerTranslationProgress((request, signal, progress) => translateTextsWithCache(
+        request.service, request.texts, request.targetLang, signal, request.sourceLang, request.scene, progress,
+    ));
 
     // Periodic refresh of the website-rule subscriptions. Alarm listener, so
     // same first-synchronous-turn requirement as the ones above.

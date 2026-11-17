@@ -19,28 +19,29 @@
 
   /* Design tokens for every extension Shadow DOM surface (AI dot, workbench,
    * selection popup, float ball, rule-mode hint). Dark values are the base —
-   * they match the historical hardcoded colors exactly; the light theme is
-   * the override block on `.fluento-ai-root[data-theme="light"]` below. */
-  --color-bg: #070b14;                          /* input/select wells */
-  --color-bg-deep: #0a111c;                     /* footer strips */
-  --color-surface: #0f1623;                     /* panel background */
-  --color-surface-2: #141d2e;                   /* header strips */
-  --color-ink: #eef1f8;
-  --color-ink-2: #cfd6e4;                       /* secondary body text */
-  --color-ink-3: #a8b0c4;                       /* dialog body text */
-  --color-ink-soft: #8a93a8;
-  --color-ink-mute: #545d75;
-  --color-line: rgba(140, 180, 230, 0.08);
-  --color-line-2: rgba(140, 180, 230, 0.1);
-  --color-line-mid: rgba(140, 180, 230, 0.12);
-  --color-line-strong: rgba(140, 180, 230, 0.18);
-  --color-hover: rgba(120, 200, 230, 0.05);     /* hover tints, weakest→strongest */
-  --color-hover-2: rgba(120, 200, 230, 0.08);
-  --color-hover-3: rgba(120, 200, 230, 0.1);
-  --color-hover-4: rgba(120, 200, 230, 0.12);
-  --color-accent: oklch(0.86 0.16 195);
+   * neutral charcoal matches popup/options. The light theme is the override
+   * block on `.fluento-ai-root[data-theme="light"]` below. */
+  --color-bg: #141414;                         /* input/select wells */
+  --color-bg-deep: #181818;                    /* footer strips */
+  --color-surface: #1c1c1c;                    /* panel background */
+  --color-surface-2: #242424;                  /* header strips */
+  --color-ink: #ededed;
+  --color-ink-2: #d4d4d4;                      /* secondary body text */
+  --color-ink-3: #b8b8b8;                      /* dialog body text */
+  --color-ink-soft: #aaaaaa;
+  --color-ink-mute: #969696;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-2: rgba(255, 255, 255, 0.1);
+  --color-line-mid: rgba(255, 255, 255, 0.12);
+  --color-line-strong: rgba(255, 255, 255, 0.18);
+  --color-hover: rgba(255, 255, 255, 0.04);     /* hover tints, weakest→strongest */
+  --color-hover-2: rgba(255, 255, 255, 0.06);
+  --color-hover-3: rgba(255, 255, 255, 0.08);
+  --color-hover-4: rgba(255, 255, 255, 0.1);
+  --color-accent: #79c4ae;
+  --color-accent-strong: #92d4c0;
   --color-accent-ink: #04060a;                  /* text on accent fills */
-  --color-backdrop: rgba(7, 11, 20, 0.45);      /* modal click-shields */
+  --color-backdrop: rgba(0, 0, 0, 0.45);      /* modal click-shields */
   --color-danger-soft: rgba(255, 80, 80, 0.08);
   --color-danger-ink: #fca5a5;                  /* red-300 */
   --color-danger-ink-2: #fecaca;                /* red-200 (danger hover) */
@@ -114,7 +115,7 @@
  * direct `linear-gradient()` value sidesteps the variable system entirely
  * and renders identically on every host site. */
 .fluento-ai-primary {
-  background: linear-gradient(to bottom right, oklch(0.92 0.15 190), oklch(0.86 0.16 195));
+  background: linear-gradient(to bottom right, var(--color-accent-strong), var(--color-accent));
   color: #04060a;
   font-weight: 500;
 }

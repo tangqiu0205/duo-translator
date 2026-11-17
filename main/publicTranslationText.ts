@@ -4,7 +4,8 @@ import { placeholdersPreserved, stripPlaceholders } from '@/main/builtinAi/place
 import { checkPublicAbort } from '@/main/publicTranslationRuntime';
 
 export interface PublicTranslation { text: string; sourceLang: string }
-type Translate = (texts: string[]) => Promise<PublicTranslation[]>;
+export type PublicTranslationProgress = (index: number, result: PublicTranslation) => void;
+type Translate = (texts: string[], onResult?: PublicTranslationProgress) => Promise<PublicTranslation[]>;
 export { decode as decodePublicTranslationText, escapeMapped as escapePublicTranslationHtml };
 const TAG = /^<\/?b\d+>$/;
 
@@ -29,14 +30,33 @@ function assertResults(results: PublicTranslation[], count: number): void {
 }
 
 export async function translatePublicMapped(
-    texts: string[], translate: Translate, signal?: AbortSignal | null,
+    texts: string[], translate: Translate, signal?: AbortSignal | null, onResult?: PublicTranslationProgress,
 ): Promise<PublicTranslation[]> {
     checkPublicAbort(signal);
     const output = texts.map((text) => ({ text, sourceLang: '' }));
     const active = texts.map((text, index) => ({ index, query: decode(text) }))
         .filter(({ query }) => stripPlaceholders(query).trim());
     if (!active.length) return output;
-    const translated = await translate(active.map(({ query }) => query));
+    const delivered = new Set<number>();
+    const publish = (index: number, item: PublicTranslation) => {
+        checkPublicAbort(signal);
+        if (delivered.has(index)) return;
+        delivered.add(index);
+        onResult?.(index, item);
+    };
+    const progress: PublicTranslationProgress = (position, item) => {
+        const entry = active[position];
+        if (!entry || !item || typeof item.text !== 'string' || !item.text.trim()) {
+            throw new Error('Public translation service returned invalid progress');
+        }
+        const normalized = item.text.replace(/<\s*(\/?)\s*b\s*(\d+)\s*>/g, '<$1b$2>');
+        const mapped = /<\/?b\d+>/.test(texts[entry.index]);
+        // Broken inline markup is not displayable until the repair finishes.
+        if (mapped && !placeholdersPreserved(texts[entry.index], normalized)) return;
+        publish(entry.index, { text: mapped ? escapeMapped(normalized) : escape(item.text), sourceLang: item.sourceLang });
+    };
+    const queries = active.map(({ query }) => query);
+    const translated = await (onResult ? translate(queries, progress) : translate(queries));
     assertResults(translated, active.length);
     checkPublicAbort(signal);
     const repairs: { index: number; parts: string[]; slots: number[] }[] = [];
@@ -56,6 +76,10 @@ export async function translatePublicMapped(
         repairs.push({ index, parts, slots });
         output[index].sourceLang = item.sourceLang;
     });
+    if (onResult) {
+        const awaitingRepair = new Set(repairs.map(repair => repair.index));
+        output.forEach((item, index) => { if (!awaitingRepair.has(index)) publish(index, item); });
+    }
     if (repairs.length) {
         // Retry only spans whose markup was lost, preserving the element map
         // locally instead of silently dropping links/emphasis from the page.
@@ -76,5 +100,6 @@ export async function translatePublicMapped(
         }
     }
     checkPublicAbort(signal);
+    if (onResult) output.forEach((item, index) => publish(index, item));
     return output;
 }

@@ -6,7 +6,7 @@ import { sameLanguage } from '@/main/builtinAi/placeholders';
 import { sseEvents } from '@/main/aiServiceShared';
 import { DOUBAO_ENGINES, DOUBAO_ARTICLE_ENDPOINT, DOUBAO_SUBTITLE_ENDPOINT, DOUBAO_LAUNCH_ENDPOINT } from '@/main/publicTranslationConfig';
 import { checkPublicAbort, ensurePublicHeaders, PublicRequestLimiter, PublicTranslationError } from '@/main/publicTranslationRuntime';
-import { translatePublicMapped, type PublicTranslation } from '@/main/publicTranslationText';
+import { translatePublicMapped, type PublicTranslation, type PublicTranslationProgress } from '@/main/publicTranslationText';
 
 const limiter = new PublicRequestLimiter(3, 1000, 2); // Shared by all three engines.
 const DEVICE_KEY = '__fluento_doubao_translation_device'; // Device-local, not a config/sync key.
@@ -137,7 +137,7 @@ export class DoubaoTranslator {
             return { webId, country: typeof json.data.country === 'string' ? json.data.country.slice(0, 64) : '', ttWid: !!raw?.ttwid, expires: Date.now() + 10 * 60_000 };
         }, signal);
     }
-    private async article(texts: string[], target: string, signal?: AbortSignal | null): Promise<PublicTranslation[]> {
+    private async article(texts: string[], target: string, signal?: AbortSignal | null, onResult?: PublicTranslationProgress): Promise<PublicTranslation[]> {
         const output: Array<PublicTranslation | undefined> = texts.map(() => undefined);
         let missing = texts.map((_, index) => index);
         for (let attempt = 0; attempt < 2 && missing.length; attempt++) {
@@ -165,6 +165,8 @@ export class DoubaoTranslator {
                         const text = sameLanguage(detected, target) ? texts[index] : item.res;
                         if (!text.trim()) continue; // An empty answer is still a missing item.
                         output[index] = { text, sourceLang: normalizeLanguageTag(detected) };
+                        checkPublicAbort(signal);
+                        onResult?.(index, output[index]!);
                     }
                 }
             }, signal);
@@ -185,19 +187,21 @@ export class DoubaoTranslator {
             return json.data.items.map((item: { res: string }) => ({ text: item.res, sourceLang: '' }));
         }, signal);
     }
-    async translate(texts: string[], target: string, signal?: AbortSignal | null, source?: string, scene?: 'subtitle'): Promise<PublicTranslation[]> {
+    async translate(texts: string[], target: string, signal?: AbortSignal | null, source?: string, scene?: 'subtitle', onResult?: PublicTranslationProgress): Promise<PublicTranslation[]> {
         if (!texts.length) return [];
         if (source) throw new Error('Doubao uses automatic source detection. Select Auto detect as the source language.');
         const subtitle = scene === 'subtitle' && SUBTITLE_LANGUAGES[target] !== undefined;
         if (!subtitle) articleLanguage(target); // Reject unsupported targets before using a login session.
         try {
-            return await translatePublicMapped(texts, async (queries) => {
+            return await translatePublicMapped(texts, async (queries, progress) => {
                 await this.initialize(signal);
                 const output: PublicTranslation[] = [];
                 let batch: string[] = [], chars = 0;
                 const flush = async () => {
                     if (!batch.length) return;
-                    output.push(...await (subtitle ? this.subtitles(batch, target, signal) : this.article(batch, target, signal)));
+                    const offset = output.length;
+                    output.push(...await (subtitle ? this.subtitles(batch, target, signal)
+                        : this.article(batch, target, signal, progress ? (index, item) => progress(offset + index, item) : undefined)));
                     batch = []; chars = 0;
                 };
                 for (const text of queries) {
@@ -206,7 +210,7 @@ export class DoubaoTranslator {
                 }
                 await flush();
                 return output;
-            }, signal);
+            }, signal, onResult);
         } catch (error) {
             if (error instanceof PublicTranslationError && error.detail.code === 'auth') this.session = undefined;
             throw error;

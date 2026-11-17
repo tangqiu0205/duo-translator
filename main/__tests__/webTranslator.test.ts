@@ -20,6 +20,25 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('publishes a long paragraph only after all chunks finish, without waiting for the next paragraph', async () => {
+    let finishParagraph!: (response: Response) => void;
+    let finishNext!: (response: Response) => void;
+    fetchMock.mockResolvedValueOnce(reply('transmart', '前半'))
+        .mockImplementationOnce(() => new Promise<Response>(resolve => { finishParagraph = resolve; }))
+        .mockImplementationOnce(() => new Promise<Response>(resolve => { finishNext = resolve; }));
+    const progress = vi.fn();
+    const pending = new module.WebTranslator('transmart').translate(['x'.repeat(1001), 'next paragraph'], 'zh-CN', undefined, undefined, progress);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(progress).not.toHaveBeenCalled();
+    finishParagraph(reply('transmart', '后半'));
+    await vi.waitFor(() => expect(progress).toHaveBeenCalledWith(0, { text: '前半后半', sourceLang: '' }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(progress).toHaveBeenCalledTimes(1);
+    finishNext(reply('transmart', '下一段'));
+    await pending;
+    expect(progress).toHaveBeenCalledTimes(2);
+});
+
 it.each(WEB_TRANSLATION_SERVICES)('uses the fixed %s endpoint and omits credentials and redirects', async (id) => {
     fetchMock.mockResolvedValue(reply(id, '甲 & 乙 <script>literal</script>'));
     const result = await new module.WebTranslator(id).translate(['A &amp; B &lt;script&gt;literal&lt;/script&gt;'], 'zh-CN');

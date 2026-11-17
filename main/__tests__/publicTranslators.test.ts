@@ -158,6 +158,66 @@ describe('Doubao public translation', () => {
     });
 });
 
+describe('progressive public translation', () => {
+    it('publishes a completed Bilibili paragraph without waiting for another model request', async () => {
+        let finish!: (response: Response) => void;
+        mocks.fetch.mockResolvedValueOnce(chat('第一段'))
+            .mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }));
+        const progress = vi.fn();
+        const pending = new BilibiliTranslator().translate(['first', 'second'], 'zh-CN', undefined, undefined, progress);
+        await vi.waitFor(() => expect(progress).toHaveBeenCalledWith(0, { text: '第一段', sourceLang: '' }));
+        expect(progress).toHaveBeenCalledTimes(1);
+        finish(chat('第二段')); await pending;
+        expect(progress).toHaveBeenCalledTimes(2);
+    });
+    it('delivers Doubao SSE paragraphs before the response stream closes', async () => {
+        let stream!: ReadableStreamDefaultController<Uint8Array>;
+        const encoder = new TextEncoder();
+        const event = (index: number, res: string) => encoder.encode(`event: json\ndata: ${JSON.stringify({ code: 0, data: { items: [{ index, res, detect_lang: 'en' }] } })}\n\n`);
+        routeDoubao(() => new Response(new ReadableStream({ start(controller) {
+            stream = controller;
+            controller.enqueue(event(1, '第二段'));
+        } }), { headers: { 'Content-Type': 'text/event-stream' } }));
+        const progress = vi.fn();
+        const pending = new DoubaoTranslator('doubao').translate(['first', 'second'], 'zh-CN', undefined, undefined, undefined, progress);
+        await vi.waitFor(() => expect(progress).toHaveBeenCalledWith(1, { text: '第二段', sourceLang: 'en' }));
+        expect(progress).toHaveBeenCalledTimes(1);
+        stream.enqueue(event(0, '第一段')); stream.close();
+        const result = await pending;
+        expect(result.map(item => item.text)).toEqual(['第一段', '第二段']);
+        expect(progress).toHaveBeenCalledTimes(2);
+    });
+    it('does not publish broken formatting before repair, and does not duplicate good results', async () => {
+        const progress = vi.fn();
+        const translate = vi.fn().mockImplementationOnce(async (_texts, publish) => {
+            publish(0, { text: '你好 & 世界', sourceLang: 'en' });
+            publish(1, { text: 'lost tags', sourceLang: 'en' });
+            expect(progress.mock.calls).toEqual([[0, { text: '你好 &amp; 世界', sourceLang: 'en' }]]);
+            return [{ text: '你好 & 世界', sourceLang: 'en' }, { text: 'lost tags', sourceLang: 'en' }];
+        }).mockResolvedValueOnce([{ text: '格式修复', sourceLang: 'en' }]);
+        const output = await translatePublicMapped(['hello', '<b0>format</b0>'], translate, undefined, progress);
+        expect(output[1].text).toBe('<b0>格式修复</b0>');
+        expect(progress.mock.calls).toEqual([[0, output[0]], [1, output[1]]]);
+    });
+    it('keeps a successfully translated paragraph visible if a later item fails', async () => {
+        const progress = vi.fn();
+        await expect(translatePublicMapped(['first', 'second'], async (_texts, publish) => {
+            publish!(0, { text: '第一段', sourceLang: 'en' });
+            throw Error('later failed');
+        }, undefined, progress)).rejects.toThrow('later failed');
+        expect(progress).toHaveBeenCalledWith(0, { text: '第一段', sourceLang: 'en' });
+    });
+    it('checks cancellation before publishing late provider results', async () => {
+        const controller = new AbortController(), progress = vi.fn();
+        await expect(translatePublicMapped(['first'], async (_texts, publish) => {
+            controller.abort();
+            publish!(0, { text: 'late', sourceLang: 'en' });
+            return [];
+        }, controller.signal, progress)).rejects.toMatchObject({ name: 'AbortError' });
+        expect(progress).not.toHaveBeenCalled();
+    });
+});
+
 describe('public mapped HTML adapter', () => {
     it('preserves markers and escapes provider text exactly once', async () => {
         const translate = vi.fn(async () => [{ text: '<b0>A & B</b0>', sourceLang: 'en' }]);

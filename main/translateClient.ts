@@ -1,6 +1,7 @@
 import { ACTION, AI_PREFIX, AI_REQUEST_TIMEOUT, APP_NAME_WITH_SUFFIX, CONFIG_KEY, EXCLUDE_CHILD_ELEMENT_TAGS, API_REQUEST_TIMEOUT, TRANSLATE_SERVICE, VIEW_STRATEGY } from "@/main/constants";
 import { sendMessageToBackgroundOrThrow } from "../utils/message";
 import { abortableRequest } from "@/utils/abortableRequest";
+import { requestTranslationProgress, type TranslationProgress } from '@/main/translationProgress';
 import { ERROR_SCOPE, reportRequestError } from "@/main/errorReport";
 import { getConfig } from "@/utils/db";
 import { defineUnlistedScript } from "wxt/utils/define-unlisted-script";
@@ -394,6 +395,7 @@ export async function getTranslateResult(
      * SINGLE re-translations pass one; see TranslateResult.sourceText.
      */
     sourceTextOf?: SourceTextResolver,
+    onResult?: (result: TranslateResult) => Promise<void>,
 ): Promise<TranslateResult[]> {
     if (!elements || elements.length === 0) return [];
 
@@ -459,15 +461,10 @@ export async function getTranslateResult(
     }
     if (pendings.length === 0) return [];
 
-    const results = await translateTexts(service, pendings.map(p => p.text), targetLang, signal);
-    if (!results) return [];
-
-    const out: TranslateResult[] = [];
-    for (let i = 0; i < results.length && i < pendings.length; i++) {
-        const result = results[i];
+    const annotate = (i: number, raw: TranslateResult): TranslateResult | undefined => {
+        const result = Object.assign(new TranslateResult(raw.translatedMappedHtmlText, raw.sourceLang, raw.score), raw);
         const pending = pendings[i];
-        // Echoed translation (same as source) — nothing to change, drop it.
-        if (pending.text === result.translatedMappedHtmlText) continue;
+        if (!pending || pending.text === result.translatedMappedHtmlText) return undefined;
         result.unit = pending.unit;
         result.originalSliceElements = pending.pre.elements
         result.rawMappedHtmlText = pending.pre.mappedHtmlText;
@@ -483,9 +480,44 @@ export async function getTranslateResult(
             result.unitRange = pending.range;
         }
         result.textNodes = pending.pre.textNodes
-        out.push(result);
+        return result;
+    };
+    const delivered = new Set<number>();
+    const annotatedResults = new Map<number, TranslateResult>();
+    let commits = Promise.resolve();
+    let commitError: unknown;
+    const publish: TranslationProgress = (index, raw) => {
+        if (delivered.has(index) || signal?.aborted) return;
+        const result = annotate(index, raw);
+        delivered.add(index);
+        if (result) annotatedResults.set(index, result);
+        if (result && onResult) {
+            commits = commits.then(async () => {
+                if (!signal?.aborted && !commitError) await onResult(result);
+            }).catch(error => { commitError = error; });
+        }
+    };
+    try {
+        const results = await translateTexts(service, pendings.map(p => p.text), targetLang, signal,
+            undefined, undefined, onResult ? publish : undefined);
+        if (!results) return [];
+        if (results.length !== pendings.length) throw new Error('Incomplete paragraph translation batch');
+        const out: TranslateResult[] = [];
+        results.forEach((raw, index) => {
+            if (onResult) publish(index, raw);
+            else {
+                const result = annotate(index, raw);
+                if (result) out.push(result);
+            }
+        });
+        await commits;
+        if (commitError) throw commitError;
+        return onResult ? [...annotatedResults.entries()].sort(([a], [b]) => a - b).map(([, result]) => result) : out;
+    } finally {
+        // Already-delivered paragraphs must finish committing even if a later
+        // item fails; callers keep only the unfinished paragraphs in retry UI.
+        await commits;
     }
-    return out;
 }
 
 /**
@@ -709,8 +741,13 @@ export async function translateTexts(
     signal?: AbortSignal | null,
     sourceLang?: string,
     scene?: 'subtitle',
+    onResult?: TranslationProgress,
 ): Promise<TranslateResult[] | undefined> {
     if (texts.length === 0) return [];
+    if (onResult) {
+        return requestTranslationProgress({ service, texts, targetLang, sourceLang, scene }, signal,
+            AI_REQUEST_TIMEOUT, onResult);
+    }
     const raw = await abortableRequest<any[] | null>({
         action: ACTION.TRANSLATE_TEXTS,
         abortAction: ACTION.TRANSLATE_TEXTS_ABORT,

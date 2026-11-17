@@ -22,6 +22,35 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
+it('remaps cached and streaming miss indices to the original paragraph order', async () => {
+    config[CONFIG_KEY.TRANSLATION_CACHE_SWITCH] = true;
+    mocks.cacheGet.mockResolvedValue([{ t: '缓存', s: 'en', c: 1 }, null, null]);
+    const { DoubaoTranslator } = await import('@/main/doubaoTranslator');
+    const progress = vi.fn();
+    vi.spyOn(DoubaoTranslator.prototype, 'translate').mockImplementation(async (_texts, _target, _signal, _source, _scene, publish) => {
+        expect(progress).toHaveBeenCalledWith(0, answer('缓存'));
+        publish!(1, { text: '第三段', sourceLang: 'en' });
+        return [{ text: '第二段', sourceLang: 'en' }, { text: '第三段', sourceLang: 'en' }];
+    });
+    const results = await services.translateTextsWithCache('doubao', ['one', 'two', 'three'], 'zh-CN', undefined, undefined, undefined, progress);
+    expect(progress).toHaveBeenCalledWith(2, answer('第三段'));
+    expect(results?.map(item => item.translatedMappedHtmlText)).toEqual(['缓存', '第二段', '第三段']);
+});
+
+it('does not publish results from a free-pool attempt that may still fall back', async () => {
+    pool(['doubao', 'google']);
+    const { DoubaoTranslator } = await import('@/main/doubaoTranslator');
+    vi.spyOn(DoubaoTranslator.prototype, 'translate').mockImplementation(async (_texts, _target, _signal, _source, _scene, publish) => {
+        expect(publish).toBeUndefined();
+        throw Error('failed after partial stream');
+    });
+    vi.spyOn(services.googleTranslationService, 'translateText').mockResolvedValue([answer('备用结果')]);
+    const progress = vi.fn();
+    const results = await services.translateTextsWithCache('freeAuto', ['one'], 'zh-CN', undefined, undefined, undefined, progress);
+    expect(progress).not.toHaveBeenCalled();
+    expect(results?.[0]).toMatchObject({ actualService: 'google', translatedMappedHtmlText: '备用结果' });
+});
+
 it('registers the aggregate and pins it first in the shared display list', async () => {
     const { TRANSLATE_SERVICES } = await import('@/main/constants');
     expect(services.resolveTranslateService('freeAuto')).toBeInstanceOf(services.FreeTranslateService);
@@ -34,7 +63,7 @@ it.each(['transmart', 'volcengine', 'lara', 'modernMt'] as const)('registers %s 
     expect(services.resolveTranslateService(id)).toBeInstanceOf(services.WebTranslateService);
     const result = await services.translateTextsWithCache('freeAuto', ['A &amp; B'], 'zh-CN', undefined, 'en', 'subtitle');
     expect(result?.[0]).toMatchObject({ translatedMappedHtmlText: '甲 &amp; 乙', actualService: id });
-    expect(translate).toHaveBeenCalledWith(['A &amp; B'], 'zh-CN', expect.any(AbortSignal), 'en');
+    expect(translate).toHaveBeenCalledWith(['A &amp; B'], 'zh-CN', expect.any(AbortSignal), 'en', undefined);
     expect(mocks.cacheGet).toHaveBeenCalledWith(`${id}:from:en`, 'zh-CN', ['A &amp; B']);
     expect(mocks.cachePut).toHaveBeenCalledWith(`${id}:from:en`, 'zh-CN', expect.any(Array));
 });
@@ -114,7 +143,7 @@ it('forwards subtitle scene to opted-in Doubao and uses its subtitle cache names
     const { DoubaoTranslator } = await import('@/main/doubaoTranslator');
     const doubao = vi.spyOn(DoubaoTranslator.prototype, 'translate').mockResolvedValue([{ text: '字幕', sourceLang: '' }]);
     const result = await services.translateTextsWithCache('freeAuto', ['caption'], 'uk', undefined, undefined, 'subtitle');
-    expect(doubao).toHaveBeenCalledWith(['caption'], 'uk', expect.any(AbortSignal), undefined, 'subtitle');
+    expect(doubao).toHaveBeenCalledWith(['caption'], 'uk', expect.any(AbortSignal), undefined, 'subtitle', undefined);
     expect(mocks.cacheGet).toHaveBeenCalledWith('doubaoVolc:subtitle', 'uk', ['caption']);
     expect(result?.[0].actualService).toBe('doubaoVolc');
 });

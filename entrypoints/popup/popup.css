@@ -2,31 +2,31 @@
 /* Self-hosted Inter / JetBrains Mono (no fonts.googleapis.com request) */
 @import "../../assets/fonts.css";
 
-/* Design tokens — deep navy theme with vivid cyan accent */
+/* Dark theme — neutral charcoal surfaces with a restrained mint accent. */
 @theme {
-  --color-bg: #070b14;
-  --color-surface: #0f1623;
-  --color-surface-2: #141d2e;
-  --color-surface-hi: #1a2438;
-  --color-ink: #eef1f8;
-  --color-ink-soft: #8a93a8;
-  --color-ink-mute: #545d75;
-  --color-line: rgba(120, 160, 220, 0.08);
-  --color-line-strong: rgba(140, 180, 230, 0.18);
-  --color-hover: rgba(120, 200, 230, 0.05);
-  --color-accent: oklch(0.86 0.16 195);
-  --color-accent-strong: oklch(0.92 0.15 190);
-  --color-accent-soft: oklch(0.5 0.12 195 / 0.22);
-  --color-accent-glow: oklch(0.85 0.2 195 / 0.55);
+  --color-bg: #141414;
+  --color-surface: #1c1c1c;
+  --color-surface-2: #242424;
+  --color-surface-hi: #2e2e2e;
+  --color-ink: #ededed;
+  --color-ink-soft: #aaaaaa;
+  --color-ink-mute: #969696;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-strong: rgba(255, 255, 255, 0.18);
+  --color-hover: rgba(255, 255, 255, 0.04);
+  --color-accent: #79c4ae;
+  --color-accent-strong: #92d4c0;
+  --color-accent-soft: rgba(121, 196, 174, 0.14);
+  --color-accent-glow: rgba(121, 196, 174, 0.18);
   --color-toggle-off: rgba(255, 255, 255, 0.1);
   /* Text on accent-filled surfaces (segmented thumb, primary buttons). */
   --color-accent-ink: #04060a;
   /* AI Writing banner card (gradient + icon chip + grid/glow overlays). */
-  --color-banner-1: oklch(0.22 0.04 230);
-  --color-banner-2: oklch(0.16 0.03 245);
+  --color-banner-1: #262626;
+  --color-banner-2: #1e1e1e;
   --color-banner-chip: rgba(255, 255, 255, 0.05);
   --color-banner-grid: rgba(255, 255, 255, 0.04);
-  --color-banner-glow-2: oklch(0.6 0.2 290 / 0.3);
+  --color-banner-glow-2: rgba(121, 196, 174, 0.1);
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   /* `-apple-system` sits between JetBrains Mono and the monospace fallbacks on

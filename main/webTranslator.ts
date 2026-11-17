@@ -4,7 +4,7 @@
 import { LANGUAGES_MAP } from '@/main/constants';
 import { baiduMd5 } from '@/main/baiduMd5';
 import { checkPublicAbort, PublicRequestLimiter, PublicTranslationError } from '@/main/publicTranslationRuntime';
-import { translatePublicMapped, type PublicTranslation } from '@/main/publicTranslationText';
+import { translatePublicMapped, type PublicTranslation, type PublicTranslationProgress } from '@/main/publicTranslationText';
 import { WEB_TRANSLATION_ENDPOINTS, WEB_TRANSLATION_SERVICES, type WebTranslationService } from '@/main/webTranslationConfig';
 
 const limiters = new Map(WEB_TRANSLATION_SERVICES.map((id) => [id, new PublicRequestLimiter(3, 1000, 2)]));
@@ -155,12 +155,12 @@ export class WebTranslator {
             }
         }, signal);
     }
-    async translate(texts: string[], target: string, signal?: AbortSignal | null, source?: string): Promise<PublicTranslation[]> {
+    async translate(texts: string[], target: string, signal?: AbortSignal | null, source?: string, onResult?: PublicTranslationProgress): Promise<PublicTranslation[]> {
         checkPublicAbort(signal);
         if (!texts.length) return [];
         const from = language(this.service, source, false);
         const to = language(this.service, target, true);
-        return translatePublicMapped(texts, async (queries) => {
+        return translatePublicMapped(texts, async (queries, progress) => {
             const output: PublicTranslation[] = [];
             for (const query of queries) {
                 let translated = '';
@@ -175,9 +175,12 @@ export class WebTranslator {
                         translated += before + await this.request(content, from, to, signal) + after;
                     }
                 }
-                output.push({ text: translated, sourceLang: source || '' });
+                const item = { text: translated, sourceLang: source || '' };
+                checkPublicAbort(signal);
+                progress?.(output.length, item);
+                output.push(item);
             }
             return output;
-        }, signal);
+        }, signal, onResult);
     }
 }

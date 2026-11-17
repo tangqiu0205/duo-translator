@@ -214,6 +214,7 @@ export function getMicrosoftToken(force = false): Promise<Token> {
 export interface TranslateRequestOptions {
     retryCount?: number;
     scene?: 'subtitle';
+    onResult?: (index: number, result: TranslateResult) => void;
 }
 
 // A NOTE ON FAILURE, since this reverses an earlier design:
@@ -1262,8 +1263,9 @@ export class AiTranslateService extends TranslateService {
 export class BilibiliTranslateService extends TranslateService {
     readonly name = TRANSLATE_SERVICE.BILIBILI;
     constructor(private readonly model?: string) { super(); }
-    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string): Promise<TranslateResult[]> {
-        const results = await new BilibiliTranslator(this.model).translate(texts, target, signal, source);
+    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string, options?: TranslateRequestOptions): Promise<TranslateResult[]> {
+        const results = await new BilibiliTranslator(this.model).translate(texts, target, signal, source,
+            options?.onResult ? (index, item) => options.onResult!(index, new TranslateResult(item.text, item.sourceLang, 1)) : undefined);
         return results.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
     }
 }
@@ -1271,8 +1273,9 @@ export class BilibiliTranslateService extends TranslateService {
 export class WebTranslateService extends TranslateService {
     private readonly translator: WebTranslator;
     constructor(readonly name: WebTranslationService) { super(); this.translator = new WebTranslator(name); }
-    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string): Promise<TranslateResult[]> {
-        const results = await this.translator.translate(texts, target, signal, source);
+    async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string, options?: TranslateRequestOptions): Promise<TranslateResult[]> {
+        const results = await this.translator.translate(texts, target, signal, source,
+            options?.onResult ? (index, item) => options.onResult!(index, new TranslateResult(item.text, item.sourceLang, 1)) : undefined);
         return results.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
     }
 }
@@ -1281,7 +1284,8 @@ export class DoubaoTranslateService extends TranslateService {
     private readonly translator: DoubaoTranslator;
     constructor(readonly name: string) { super(); this.translator = new DoubaoTranslator(name); }
     async translateText(texts: string[], target: string, signal?: AbortSignal | null, source?: string, options?: TranslateRequestOptions): Promise<TranslateResult[]> {
-        const results = await this.translator.translate(texts, target, signal, source, options?.scene);
+        const results = await this.translator.translate(texts, target, signal, source, options?.scene,
+            options?.onResult ? (index, item) => options.onResult!(index, new TranslateResult(item.text, item.sourceLang, 1)) : undefined);
         return results.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
     }
 }
@@ -1450,6 +1454,7 @@ export async function translateTextsWithCache(
     signal?: AbortSignal,
     sourceLang?: string,
     scene?: 'subtitle',
+    onResult?: (index: number, result: TranslateResult) => void,
 ): Promise<TranslateResult[] | undefined> {
     if (texts.length === 0) return [];
     let provider = resolveTranslateService(service);
@@ -1467,7 +1472,7 @@ export async function translateTextsWithCache(
         namespace += ':' + model;
     }
     if (isDoubaoService(service) && scene === 'subtitle') namespace += ':subtitle';
-    const options: TranslateRequestOptions | undefined = scene ? { scene } : undefined;
+    const options: TranslateRequestOptions | undefined = scene || onResult ? { scene, onResult } : undefined;
     if (!(await isTranslationCacheEnabled())) {
         return provider.translateText(texts, targetLang, signal, sourceLang, options);
     }
@@ -1483,9 +1488,18 @@ export async function translateTextsWithCache(
         }
     }
 
+    cached.forEach((hit, index) => {
+        if (hit && !signal?.aborted) onResult?.(index, new TranslateResult(hit.t, hit.s, hit.c));
+    });
     let fetched: TranslateResult[] = [];
     if (missTexts.length > 0) {
-        const r = await provider.translateText(missTexts, targetLang, signal, sourceLang, options);
+        const missOptions = onResult ? { ...options,
+            onResult: (index: number, result: TranslateResult) => {
+                if (!Number.isInteger(index) || index < 0 || index >= missIndices.length) throw new Error('Invalid translation progress index');
+                if (!signal?.aborted) onResult(missIndices[index], result);
+            },
+        } : options;
+        const r = await provider.translateText(missTexts, targetLang, signal, sourceLang, missOptions);
         if (!r) return undefined; // unknown service → bail like before
         // Provider must answer 1:1 with the inputs. If it doesn't, the
         // positional remap below would misalign — fall back to a full

@@ -90,6 +90,8 @@ it('translates with explicit languages via Ctrl+Enter and exposes copy, speech a
   expect(mocks.translate).toHaveBeenCalledWith('microsoft', ['这个项目的性能表现如何？'], 'en', expect.any(AbortSignal), 'zh-CN');
   expect(container.querySelector('[role="status"]')?.textContent).toBe('How is the performance of this project?');
   expect(mocks.success).toHaveBeenCalledTimes(1);
+  expect(button('Original').getAttribute('aria-expanded')).toBe('false');
+  expect([...container.querySelectorAll('p')].some((element) => element.textContent === '这个项目的性能表现如何？')).toBe(false);
   await act(async () => byLabel('Copy translation').click());
   expect(mocks.copy).toHaveBeenCalledWith('How is the performance of this project?');
   expect(container.textContent).toContain('Copied');
@@ -97,6 +99,9 @@ it('translates with explicit languages via Ctrl+Enter and exposes copy, speech a
   expect(mocks.toggle).toHaveBeenCalledWith('original', '这个项目的性能表现如何？', 'zh-CN');
   await act(async () => byLabel('Expand translation').click());
   expect(byLabel('Collapse translation').getAttribute('aria-expanded')).toBe('true');
+  await act(async () => button('Original').click());
+  expect(button('Original').getAttribute('aria-expanded')).toBe('true');
+  expect([...container.querySelectorAll('p')].some((element) => element.textContent === '这个项目的性能表现如何？')).toBe(true);
   await act(async () => button('Original').click());
   expect(button('Original').getAttribute('aria-expanded')).toBe('false');
 });

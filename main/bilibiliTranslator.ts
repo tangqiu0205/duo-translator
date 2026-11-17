@@ -6,7 +6,7 @@ import { buildPrompt, openAiChatStream } from '@/main/aiService';
 import { configRepo } from '@/main/storage/configStore';
 import { BILIBILI_ENDPOINT, BILIBILI_MODELS, DEFAULT_BILIBILI_MODEL } from '@/main/publicTranslationConfig';
 import { checkPublicAbort, ensurePublicHeaders, PublicRequestLimiter, PublicTranslationError } from '@/main/publicTranslationRuntime';
-import { translatePublicMapped, type PublicTranslation } from '@/main/publicTranslationText';
+import { translatePublicMapped, type PublicTranslation, type PublicTranslationProgress } from '@/main/publicTranslationText';
 
 const limiter = new PublicRequestLimiter(3, 1000, 2);
 export async function getBilibiliModel(): Promise<string> {
@@ -21,7 +21,7 @@ export async function getBilibiliModel(): Promise<string> {
 export class BilibiliTranslator {
     constructor(private readonly modelOverride?: string) { }
     async translate(
-        texts: string[], targetLang: string, signal?: AbortSignal | null, sourceLang?: string,
+        texts: string[], targetLang: string, signal?: AbortSignal | null, sourceLang?: string, onResult?: PublicTranslationProgress,
     ): Promise<PublicTranslation[]> {
         if (!texts.length) return [];
         if (!LANGUAGES_MAP.has(targetLang)) throw new Error(`Bilibili: unsupported target language ${targetLang}`);
@@ -34,7 +34,7 @@ export class BilibiliTranslator {
         try {
             await ensurePublicHeaders('bilibili');
             const provider = new AiProvider('builtin-index-translate', 'custom', 'Bilibili', BILIBILI_ENDPOINT, 'not-required', model);
-            return await translatePublicMapped(texts, async (queries) => Promise.all(queries.map((text) => limiter.run(async () => {
+            return await translatePublicMapped(texts, async (queries, progress) => Promise.all(queries.map((text, index) => limiter.run(async () => {
                 const messages = buildPrompt({ task: AI_TASK.PAGE_TRANSLATE, payload: { text, targetLang } });
                 if (sourceLang) messages[0].content += ` The source language is ${LANGUAGES_MAP.get(sourceLang)?.name || sourceLang}.`;
                 let translated = '';
@@ -50,8 +50,11 @@ export class BilibiliTranslator {
                     throw error;
                 }
                 if (!translated.trim()) throw new Error('Bilibili Index-Translate returned no translation');
-                return { text: translated.trim(), sourceLang: sourceLang || '' };
-            }, controller.signal))), controller.signal);
+                const item = { text: translated.trim(), sourceLang: sourceLang || '' };
+                checkPublicAbort(controller.signal);
+                progress?.(index, item);
+                return item;
+            }, controller.signal))), controller.signal, onResult);
         } finally {
             signal?.removeEventListener('abort', cancel);
             controller.abort(); // Also cancel queued siblings after a batch failure.
