@@ -1,13 +1,10 @@
 import { alignSentenceBlocks, splitSentence, wrapTextNode2Span } from "@/main/dom/sentence";
 import { TAB_ACTION, TRANSLATE_STATUS_KEY, CONFIG_KEY, DB_ACTION, TRANSLATE_SERVICE, DOMAIN_STRATEGY, TRANSLATE_ACTION, ACTION, STORAGE_ACTION, VIEW_STRATEGY, DEFAULT_STRATEGY, ELEMENT_STATUS, APP_NAME, APP_NAME_WITH_SUFFIX, DEFAULT_VALUE, STATUS_SUCCESS, CONFIG_VALUE_TO_KEY, LANGUAGES_MAP, IS_FIREFOX, browserTargetLanguage, FLOAT_BALL_STYLE, EXTENSION_INVALID_CONTEXT_MSG, STYLE_BLUR, TRANSLATING_ANIMATION, IS_MAC } from "./constants";
-import { restore, translateParams, getTranslateResult, translate, TranslateResult, detectTextsLanguages } from "./translateClient";
+import { restore, translateParams, getTranslateResult, translate, TranslateResult } from "./translateClient";
 import { buildNoTranslateLanguageSet, isNoTranslateLanguage } from "./noTranslateLanguage";
 import { PageTranslationQueue, batchPageUnits } from './pageTranslationQueue';
-import {
-    needsCompanionDetect,
-    partitionByLocalLanguage,
-    rejectByDetectedLanguage,
-} from "./noTranslateLanguageFilter";
+import { hasMinimumTranslationTextLength, normalizeMinTranslationTextLength } from './translationTextLength';
+import { partitionByLocalLanguage } from "./noTranslateLanguageFilter";
 import { notifyBackground, runtimeSendMessage, sendMessageToBackground } from "../utils/message";
 import { browser } from "wxt/browser"
 import { mountFloatBall, type FloatBallController } from "./floatBall";
@@ -20,7 +17,7 @@ import { getConfig, listRuleFromDB } from "@/utils/db";
 import { createRuleMode, type RuleModeController } from "./ruleMode";
 import { ERROR_SCOPE, reportRequestError, showRelayedError, type ErrorScope as ERROR_SCOPE_VALUE } from "./errorReport";
 import { confirmRuleModeHint } from "./ruleHintDialog";
-import { detectLanguage, getElementTextContent } from "@/main/lang";
+import { detectLanguage } from "@/main/lang";
 import { parseTranslateServiceKey, startTranslate, TranslateServiceChoice } from "./aiWriting/translateRunner";
 import { applyTextToTarget } from "./aiWriting/applyText";
 import { documentBody, getElementText } from "@/utils/dom";
@@ -165,6 +162,9 @@ export async function content() {
     // below this block until after awaiting it — those bindings are in their
     // temporal dead zone until the awaits above them have resolved.
     let startupAborted = false
+    // Once startup can write results, a restore must not wait for the scan.
+    let startupTranslationActive = false
+    let globalSwitchHandlerReady = false
     let markStartupReady: () => void = () => { }
     const startupReady = new Promise<void>((resolve) => { markStartupReady = resolve })
 
@@ -209,7 +209,15 @@ export async function content() {
     // background already follows for its own onMessage.
     browser.runtime.onMessage.addListener(async (message) => {
         if (!message) return
-        await startupReady
+        // The Popup sends the master switch by itself. It must not wait for
+        // paragraph marks: the initial scan can already be sending requests.
+        if (globalSwitchHandlerReady && message.action === ACTION.CONFIG_CHANGED &&
+            typeof message.data?.[CONFIG_KEY.GLOBAL_SWITCH] === 'boolean' && Object.keys(message.data).length === 1) {
+            return onConfigChanged(CONFIG_KEY.GLOBAL_SWITCH, message.data[CONFIG_KEY.GLOBAL_SWITCH], !!message.active)
+        }
+        if (!(startupTranslationActive && message.action === TRANSLATE_ACTION.SHOW_ORIGINAL)) {
+            await startupReady
+        }
         if (startupAborted) return
         return handleRuntimeMessage(message)
     });
@@ -564,6 +572,10 @@ export async function content() {
     // Auto-translation also starts requests, before translateAction ever runs.
     // It must own a cancellable session just like a manually started page.
     let controller = new AbortController()
+    // Separate from request cancellation: restoring the original still needs
+    // the document marks, but turning the extension off invalidates the scan.
+    let pageLifecycle = new AbortController()
+    let unloadTask: Promise<void> | null = null
     const MARK_BUDGET_MS = 20;
     const MARK_MAX_DEPTH = 50;
     // get the id of the current tab,which used unique defines the page
@@ -755,9 +767,9 @@ export async function content() {
     // get all config from storage
     let [rules, viewStrategy, targetLanguageConfig, translateServiceConfig, globalSwitch, defaultStrategy,
         rawDomainStrategy, floatBallSwitch, floatBallStyleConfig, bilingualHighlightingSwitch, bilingualHighlightingMinSentences, translationLineBreakMinChars, aiTranslateServiceKey,
-        aiTargetLanguageConfig, contextMenuSwitch, translateStatusConfig, translatingAnimationConfig, noTranslateLanguagesConfig]
+        aiTargetLanguageConfig, contextMenuSwitch, translateStatusConfig, translatingAnimationConfig, noTranslateLanguagesConfig, minTranslationTextLengthConfig]
         : [string[], VIEW_STRATEGY, string | undefined, string | undefined, boolean, string, any, boolean, string, boolean, number,
-            number, string | undefined, string, boolean, boolean, string | undefined, string[] | undefined]
+            number, string | undefined, string, boolean, boolean, string | undefined, string[] | undefined, unknown]
         = await Promise.all(
             [
                 listRuleFromDB(domainWithPort),
@@ -778,6 +790,7 @@ export async function content() {
                 getSessionStorage(tabTranslateStatusKey),
                 getConfig(CONFIG_KEY.TRANSLATING_ANIMATION),
                 getConfig(CONFIG_KEY.NO_TRANSLATE_LANGUAGES),
+                getConfig(CONFIG_KEY.MIN_TRANSLATION_TEXT_LENGTH),
             ]
         )
     translateStatus = !!translateStatusConfig
@@ -816,6 +829,11 @@ export async function content() {
     // set is the "feature not configured" fast path every consumer checks
     // first, so nobody who leaves this alone pays for it.
     let noTranslateLanguages = buildNoTranslateLanguageSet(noTranslateLanguagesConfig)
+    let minTranslationTextLength = normalizeMinTranslationTextLength(minTranslationTextLengthConfig)
+    const lengthSkippedContainers = new Set<UnitContainer>();
+    const languageSkippedContainers = new Set<UnitContainer>();
+    const filterRecheckContainers = new Set<UnitContainer>();
+    const languagePreflights = new Map<UnitContainer, { dirty: boolean }>();
     let domainStrategy = (rawDomainStrategy?.strategy || DOMAIN_STRATEGY.AUTO) as string
     // Per-domain "translate all elements": the user's own exclusions stop
     // applying on this site — both the legacy per-host no-translate areas and
@@ -871,19 +889,39 @@ export async function content() {
     const ROOT_COMPACT_THRESHOLD = 32;
     let forgottenRootCount = 0;
 
+    function markLanguagePreflightMutation(node: Node) {
+        if (languagePreflights.size === 0) return;
+        for (let current: Node | null = node; current; current = parentOrHost(current)) {
+            const state = languagePreflights.get(current as UnitContainer);
+            if (state) state.dirty = true;
+        }
+    }
+
     function handleSourceTextMutation(target: Text) {
-        if (ignoreMutationElements.has(target)) return
+        if (ignoreMutationElements.has(target)) { markLanguagePreflightMutation(target); return; }
         const p = closestNeedsTranslate(target.parentNode)
-        if (!p || isIgnoreMutationElement(p)) return
+        if (!p) return;
+        if (isIgnoreMutationElement(p)) { markLanguagePreflightMutation(p); return; }
         const text = target.textContent
         const translated = bilingualTranslatedElementMap.has(p) || translatedElementMap.has(p)
+        if (!translated && globalSwitch && translateStatus && (lengthSkippedContainers.has(p) || languageSkippedContainers.has(p))) {
+            reobserveFilteredContainer(p);
+            return;
+        }
+        // Restoration removes translation records. Preserve their ranges so
+        // source repairs remain exempt without exempting untranslated siblings.
+        const sourceRepairRanges = [
+            ...(bilingualTranslatedElementMap.get(p) ?? []).map(record => record.range),
+            ...(translatedElementMap.get(p) ?? []).flatMap(result => result.unitRange
+                ? [result.unitRange] : result.unit ? [unitRangeOf(result.unit)] : []),
+        ];
         void restoreOriginalParagraphElement(p).then(() => {
             if (target.textContent !== text) {
                 ignoreMutationElements.add(target)
                 target.textContent = text
                 queueMicrotask(() => ignoreMutationElements.delete(target))
             }
-            if (translated && globalSwitch) void translateParagraphElements([p])
+            if (translated && globalSwitch) void translateParagraphElements([p], { sourceRepairRanges })
         })
     }
 
@@ -916,7 +954,7 @@ export async function content() {
             }
 
             // Cheap structural skip — bail before queueing.
-            if (isIgnoreMutationElement(target)) continue;
+            if (isIgnoreMutationElement(target)) { markLanguagePreflightMutation(target); continue; }
             // console.debug('mutation target', target);
             // console.debug('start mutation');
             // Removals are only *flagged* here. Cleaning them up per removed
@@ -956,7 +994,7 @@ export async function content() {
                 console.debug("batchElements translated", batchElements.length)
                 batchElements = [];
                 batchTimer = null
-            }, 50);
+            }, startupTranslationActive ? 0 : 50);
         }
     }, {
         rootMargin: '300px 0px',
@@ -1137,16 +1175,11 @@ export async function content() {
     }
     //#endregion
 
-    // The gesture listeners at the top of content() have been queueing on
-    // `startupReady` this whole time. Release them even if init() throws —
-    // otherwise every later gesture waits on a promise that never settles.
-    // (initTranslate resolves it earlier, right after the first marking scan;
-    // this is the backstop for the global-switch-off and failure paths.)
-    try {
-        if (globalSwitch) {
-            await init()
-        }
-    } finally {
+    // The master switch is now safe to handle before paragraph marks exist.
+    globalSwitchHandlerReady = true
+    if (globalSwitch) await init()
+    else {
+        pageLifecycle.abort()
         markStartupReady()
     }
 
@@ -1177,6 +1210,15 @@ export async function content() {
 
     async function onConfigChanged(key: string, value: any, activeFlag: boolean) {
         switch (key) {
+            case CONFIG_KEY.MIN_TRANSLATION_TEXT_LENGTH: {
+                const next = normalizeMinTranslationTextLength(value);
+                const previous = minTranslationTextLength;
+                minTranslationTextLength = next;
+                if (next < previous && globalSwitch && translateStatus) {
+                    for (const container of lengthSkippedContainers) reobserveFilteredContainer(container);
+                }
+                break;
+            }
             case CONFIG_KEY.TRANSLATION_LINE_BREAK_MIN_CHARS:
                 if (typeof value !== "number") return
                 translationLineBreakMinChars = value
@@ -1204,11 +1246,15 @@ export async function content() {
                     manualTrigger = false
                     globalSwitch = value
                     if (!globalSwitch) {
-                        await unload()
+                        unloadTask ??= unload().finally(() => {
+                            unloadTask = null
+                            if (!globalSwitch) markStartupReady()
+                        })
+                        await unloadTask
                         return false
-                    } else {
-                        await init()
                     }
+                    await unloadTask
+                    if (globalSwitch && pageLifecycle.signal.aborted) await init()
                 }
                 break
             case CONFIG_KEY.VIEW_STRATEGY:
@@ -1249,14 +1295,11 @@ export async function content() {
                 if (next.size === noTranslateLanguages.size
                     && [...next].every(l => noTranslateLanguages.has(l))) return
                 noTranslateLanguages = next
-                // Takes effect on the next batch only. Deliberately NOT a
-                // restore + re-translate like TARGET_LANGUAGE does: the two
-                // directions are not symmetric. Adding a language would have to
-                // find and tear down translations that are already correct on
-                // screen, and removing one would have to re-detect the whole
-                // page to know what to pick up — for a setting the user edits
-                // once. Reloading the tab is the honest answer, same as the
-                // website rules.
+                // Revisit only previously excluded containers. Existing output
+                // stays in place; new/in-flight preflights use the updated list.
+                if (globalSwitch && translateStatus) {
+                    for (const container of languageSkippedContainers) reobserveFilteredContainer(container);
+                }
                 break
             }
             case CONFIG_KEY.FLOAT_BALL_SWITCH:
@@ -1829,7 +1872,8 @@ export async function content() {
 
     async function processPendingMutations() {
         pendingProcessTimer = null;
-        if (processingActive) return;
+        if (processingActive || !globalSwitch) return;
+        const signal = pageLifecycle.signal;
         processingActive = true;
         try {
             // Cheapest possible SPA-navigation detector: one string compare on
@@ -1839,7 +1883,7 @@ export async function content() {
             // patching, no extra permission, no timer.
             if (window.location.href !== currentUrl) {
                 currentUrl = window.location.href;
-                await refreshSiteRules(currentUrl);
+                await refreshSiteRules(currentUrl, signal);
             } else if (siteRulesConditional && refreshCompiledSiteRules()) {
                 // A page-identity marker changed without the URL changing
                 // (hydration, a client-side view swap). Re-probing costs one
@@ -1853,7 +1897,7 @@ export async function content() {
             // Both conditions are re-read here rather than latched, and nothing
             // awaits between leaving this loop and clearing `processingActive`,
             // so the observer can never flag a sweep that no one comes back for.
-            while (detachSweepPending || pendingMarkRoots.size > 0) {
+            while (!signal.aborted && (detachSweepPending || pendingMarkRoots.size > 0)) {
                 if (detachSweepPending) {
                     // Before the scan, not after: it is what makes the roots
                     // this wave is about to skip cheap to skip.
@@ -1895,7 +1939,8 @@ export async function content() {
                             observeContainer(intersectionObserver, ele);
                         }
                     };
-                    const collected = await markParagraphElement(root, observeCollected);
+                    const collected = await markParagraphElement(root, observeCollected, signal);
+                    if (signal.aborted) return;
                     if (!translateStatus) {
                         // Page translation is off, so nothing here may START
                         // translating. One exception: a container the user
@@ -1922,7 +1967,8 @@ export async function content() {
             processingActive = false;
             // After the queue has drained, so the disconnect/re-observe window
             // in which a record could be dropped is as small as possible.
-            compactRootObservations();
+            if (!signal.aborted) compactRootObservations();
+            else if (globalSwitch && (detachSweepPending || pendingMarkRoots.size > 0)) scheduleMutationProcess();
         }
     }
 
@@ -1960,6 +2006,9 @@ export async function content() {
             bilingualTranslatedElementMap.delete(el);
             translatedElementMap.delete(el);
             paragraphElementMap.delete(el);
+            lengthSkippedContainers.delete(el);
+            languageSkippedContainers.delete(el);
+            filterRecheckContainers.delete(el);
             // The listeners went with the detached node, but the highlight paint
             // is document-global — drop it if this container is holding it.
             clearSentenceHighlight(el);
@@ -2018,8 +2067,16 @@ export async function content() {
      * is capped at 20 ms whichever primitive resumes it. What changes is the
      * gap between chunks, not their length.
      */
-    function yieldToBrowser(): Promise<void> {
+    function yieldToBrowser(background = false): Promise<void> {
         const scheduler = (window as any).scheduler;
+        // Once startup has handed off paragraphs, let rendering and ready
+        // translation work run ahead of the offscreen continuation.
+        if (background) {
+            if (typeof scheduler?.postTask === 'function') {
+                return scheduler.postTask(() => undefined, { priority: 'background' }).catch(() => undefined);
+            }
+            return new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
         if (typeof scheduler?.yield === 'function') {
             // Can reject if the frame's task is aborted — resolve either way,
             // the scan re-checks `isConnected` at every boundary anyway.
@@ -2037,11 +2094,19 @@ export async function content() {
      * Execute init function when page is loaded
      */
     async function init() {
+        if (pageLifecycle.signal.aborted) pageLifecycle = new AbortController()
+        const lifecycle = pageLifecycle.signal
         if (controller.signal.aborted) controller = new AbortController()
-        initCSS()
-        // The float ball is a single tab-level UI — top frame only.
-        if (isTopFrame) await initFloatBall()
-        await initTranslate()
+        try {
+            initCSS()
+            // The float ball is a single tab-level UI — top frame only.
+            if (isTopFrame) await initFloatBall()
+            if (lifecycle.aborted) return
+            await initTranslate(lifecycle)
+        } finally {
+            if (!lifecycle.aborted) markStartupReady()
+        }
+        if (lifecycle.aborted) return
         // AI Writing is independent of page-translation lifecycle: even when
         // page translation is off / restricted, the writing assistant should
         // still be available on user input fields. In sub-frames the dot mounts
@@ -2063,7 +2128,7 @@ export async function content() {
         selectionIconDisposed = false
         mountSelectionIcon({ domain: domainWithPort })
             .then((teardown) => {
-                if (selectionIconDisposed) { teardown(); return; }
+                if (lifecycle.aborted || selectionIconDisposed) { teardown(); return; }
                 selectionIconDispose = teardown
             })
             .catch((err) =>
@@ -2074,7 +2139,7 @@ export async function content() {
             mountAiWritingDot({ domain: domainWithPort })
                 .then((teardown) => {
                     // Unloaded while the async mount was in flight — undo it.
-                    if (aiWritingDotDisposed) { teardown(); return; }
+                    if (lifecycle.aborted || aiWritingDotDisposed) { teardown(); return; }
                     aiWritingDotDispose = teardown
                 })
                 .catch((err) =>
@@ -2106,7 +2171,16 @@ export async function content() {
     async function unload() {
         // Stop collection and cancel both active and unsent work before any
         // await or DOM restoration. Re-enabling creates a fresh session.
+        pageLifecycle.abort()
+        startupTranslationActive = false
         controller.abort()
+        if (pendingProcessTimer != null) clearTimeout(pendingProcessTimer)
+        pendingProcessTimer = null
+        pendingMarkRoots.clear()
+        detachSweepPending = false
+        lengthSkippedContainers.clear()
+        languageSkippedContainers.clear()
+        filterRecheckContainers.clear()
         if (batchTimer) clearTimeout(batchTimer)
         batchTimer = null
         batchElements = []
@@ -2125,7 +2199,11 @@ export async function content() {
         videoSubtitle = null
         minimalPlayerUi?.destroy()
         minimalPlayerUi = null
-        await Promise.allSettled(pendingTranslateParagraphElementsTask)
+        await Promise.allSettled([translateTask, restoreOriginalTask, ...pendingTranslateParagraphElementsTask])
+        // A restore in progress may have installed a fresh request controller.
+        controller.abort()
+        // The next scan must be able to observe these containers again.
+        paragraphElementMap.clear()
         await restoreOriginalPage(true, true)
     }
 
@@ -2158,58 +2236,53 @@ export async function content() {
         }
     }
 
-    async function initTranslate() {
+    async function initTranslate(lifecycle: AbortSignal) {
         // The first marking scan is the earliest consumer of the website rules,
         // so this is where the request started at entry is collected.
-        await awaitSiteRules()
+        const signal = controller.signal
+        await awaitSiteRules(lifecycle)
+        if (lifecycle.aborted) return
         startObserveDom()
-        let htmlElements = await markDocument();
-        // Paragraph marks now exist, which is everything the pointer gestures
-        // need — release them here rather than at the end of init(), so a
-        // double-tap does not have to wait behind a full auto-translation of
-        // the page below.
-        markStartupReady()
-        let shouldTranslate = false
-        if (isTopFrame) {
-            let needs = needsTranslate()
-            if (needs === undefined) {
-                pageLanguage = await detectLanguage(htmlElements)
-                needs = autoNeedsTranslate()
-            }
-            shouldTranslate = needs
-        }
-
-        // Late-loading sub-frame catch-up: an iframe created AFTER the user
-        // already turned translation on (e.g. a button that opens an iframe
-        // dialog) must sync to the tab's current state. The top frame only
-        // relays a toggle at the instant it happens, so a frame that loads
-        // later would otherwise stay in its original language even though the
-        // rest of the tab is translated. The top frame is the source of truth
-        // and persists the status to session storage — read it here. (Only the
-        // manual-on case needs this; isNeedsTranslate already covers the
-        // strategy/auto path, and the top frame manages its own status.)
-        if (!isTopFrame) {
-            const tabTranslated = await getSessionStorage(tabTranslateStatusKey)
-            if (tabTranslated === true) shouldTranslate = true
-        }
-        warnOnRuleMiss()
-        if (shouldTranslate || translateStatus) {
-            await updateTranslateStatus(true, !translateStatus)
-            // updateTranslateStatus returns early when the status is already
-            // true (a tab restored mid-session), so the CSS needs applying here
-            // as well. Idempotent.
-            syncSiteRuleCss(true)
-            // Push the decision to sub-frames as an explicit TRANSLATE instead
-            // of relying on them winning the session-storage race: a sub-frame
-            // whose catch-up read (above) ran BEFORE we persisted the status
-            // here would otherwise stay untranslated. Combined with the
-            // catch-up read this covers both init orders — the relay echo back
-            // to us and to already-translated frames is an idempotent no-op.
-            if (isTopFrame) relayToSubframes(TRANSLATE_ACTION.TRANSLATE)
-            htmlElements.forEach((element) => {
+        const observeCollected = (elements: UnitContainer[]) => {
+            if (lifecycle.aborted || !globalSwitch || !translateStatus || restoreOriginalTask) return
+            for (const element of elements) {
+                if (!element.isConnected || paragraphElementMap.has(element)) continue
                 paragraphElementMap.set(element, ELEMENT_STATUS.ORIGINAL)
                 observeContainer(intersectionObserver, element)
-            })
+            }
+        }
+        const startTranslation = async () => {
+            if (signal.aborted || signal !== controller.signal || !globalSwitch || restoreOriginalTask) return
+            await updateTranslateStatus(true, !translateStatus)
+            if (signal.aborted || signal !== controller.signal || !globalSwitch || restoreOriginalTask) return
+            syncSiteRuleCss(true)
+            // Covers frames whose catch-up read happened before the top frame
+            // persisted this decision. Later frames read the session directly.
+            if (isTopFrame) relayToSubframes(TRANSLATE_ACTION.TRANSLATE)
+        }
+
+        const needs = isTopFrame ? needsTranslate() : (await getSessionStorage(tabTranslateStatusKey)) === true
+        if (lifecycle.aborted) return
+        if (needs === true || translateStatus) await startTranslation()
+        if (lifecycle.aborted) return
+        startupTranslationActive = translateStatus
+        let htmlElements: UnitContainer[]
+        try {
+            // Known decisions can stream discoveries to the viewport observer.
+            // AUTO still needs the complete candidate list before it can start.
+            htmlElements = await markDocument(observeCollected)
+        } finally {
+            if (!lifecycle.aborted) startupTranslationActive = false
+        }
+        if (lifecycle.aborted) return
+        markStartupReady()
+        warnOnRuleMiss()
+        if (needs !== undefined || signal.aborted || signal !== controller.signal || !globalSwitch || translateStatus) return
+        pageLanguage = await detectLanguage(htmlElements, signal)
+        if (signal.aborted || signal !== controller.signal || !globalSwitch) return
+        if (autoNeedsTranslate()) {
+            await startTranslation()
+            observeCollected(htmlElements)
         }
     }
 
@@ -2367,8 +2440,10 @@ export async function content() {
      * Take delivery of the candidate set started at content-script entry and
      * compile it. Idempotent — awaiting a settled promise costs a microtask.
      */
-    async function awaitSiteRules() {
-        siteRuleCandidates = await siteRuleCandidatesPromise
+    async function awaitSiteRules(signal: AbortSignal) {
+        const candidates = await siteRuleCandidatesPromise
+        if (signal.aborted) return
+        siteRuleCandidates = candidates
         siteRulesConditional = hasConditionalRules(siteRuleCandidates)
         refreshCompiledSiteRules()
     }
@@ -2408,8 +2483,10 @@ export async function content() {
      * marked content is left alone: a route change replaces the DOM, and the
      * MutationObserver marks the replacement with the new rules.
      */
-    async function refreshSiteRules(url: string) {
-        siteRuleCandidates = await fetchSiteRuleCandidates(url)
+    async function refreshSiteRules(url: string, signal: AbortSignal) {
+        const candidates = await fetchSiteRuleCandidates(url)
+        if (signal.aborted) return
+        siteRuleCandidates = candidates
         siteRulesConditional = hasConditionalRules(siteRuleCandidates)
         refreshCompiledSiteRules()
         syncSiteRuleCss()
@@ -2502,7 +2579,8 @@ export async function content() {
         // menu persists domain.floatBallDisabled — honour it on (re)mount.
         if (rawDomainStrategy?.floatBallDisabled) return
         if (floatBall) return
-        floatBall = await mountFloatBall({
+        const lifecycle = pageLifecycle.signal
+        const mounted = await mountFloatBall({
             domain: domainWithPort,
             style: floatBallStyle,
             initiallyActive: translateStatus,
@@ -2516,6 +2594,8 @@ export async function content() {
                 setTimeout(() => removeFloatBall(), 0)
             },
         })
+        if (lifecycle.aborted) mounted.destroy()
+        else floatBall = mounted
     }
 
     /**
@@ -2543,9 +2623,9 @@ export async function content() {
             return
         }
         console.debug("persist translate status", status);
-        if (persist) {
-            await setSessionStorage(tabTranslateStatusKey, status)
-        }
+        // Apply the local transition before waiting for storage so an off
+        // action racing this write can clear it without leaving stale state.
+        const saved = persist ? setSessionStorage(tabTranslateStatusKey, status) : undefined
         translateStatus = status
         setFloatBallSwitchStatus(status)
         // notify the popup and background to set translate status. Fire-and-
@@ -2558,6 +2638,7 @@ export async function content() {
                 status: status
             }
         });
+        await saved
     }
 
     /**
@@ -2710,14 +2791,15 @@ export async function content() {
     }
 
     async function translateAction() {
-        if (translateTask) {
+        if (translateTask || !globalSwitch || pageLifecycle.signal.aborted) {
             return
         }
+        const lifecycle = pageLifecycle.signal
         const action = async () => {
             if (restoreOriginalTask) {
                 await restoreOriginalTask
             }
-            if (translateStatus) {
+            if (lifecycle.aborted || translateStatus) {
                 return
             }
             controller = new AbortController()
@@ -2763,6 +2845,9 @@ export async function content() {
             manualTrigger = true
             await updateTranslateStatus(false)
             paragraphElementMap.clear()
+            lengthSkippedContainers.clear()
+            languageSkippedContainers.clear()
+            filterRecheckContainers.clear()
             intersectionObserver.disconnect()
             resetObserveTargets()
 
@@ -3131,9 +3216,9 @@ export async function content() {
      * was decided. Scanning nothing is right in both cases: the <html>-level
      * observer re-roots marking on a fresh <body> when one is added.
      */
-    function markDocument(): Promise<UnitContainer[]> {
+    function markDocument(onCollected?: (batch: UnitContainer[]) => void): Promise<UnitContainer[]> {
         const body = documentBody()
-        return body ? markParagraphElement(body) : Promise.resolve([])
+        return body ? markParagraphElement(body, onCollected, pageLifecycle.signal, Boolean(onCollected)) : Promise.resolve([])
     }
 
     /**
@@ -3154,7 +3239,9 @@ export async function content() {
     // mutation suppression around our own DOM writes).
     async function markParagraphElement(
         element: UnitContainer,
-        onCollected?: (batch: UnitContainer[]) => void,
+        onCollected: ((batch: UnitContainer[]) => void) | undefined,
+        signal: AbortSignal,
+        initialScan = false,
     ): Promise<UnitContainer[]> {
         let notTranslate = false;
         const rawElement = element;
@@ -3268,7 +3355,8 @@ export async function content() {
                     // "a root is styled before anything is written into it" is
                     // kept at the single write site instead — translateUnits.
                     drain();
-                    await yieldToBrowser();
+                    await yieldToBrowser(initialScan && startupTranslationActive && translateStatus);
+                    if (signal.aborted) return [];
                     chunkStart = performance.now();
                 }
                 const frame = stack.pop()!;
@@ -3376,8 +3464,9 @@ export async function content() {
             // The last chunk's discoveries, plus anything still queued if the
             // walk threw: a root left unstyled would render its translations
             // (and its `::highlight()` paint) with no CSS at all.
-            flushShadowRootStyles();
+            if (!signal.aborted) flushShadowRootStyles();
         }
+        drain();
         return collectElements;
     }
 
@@ -3617,6 +3706,10 @@ export async function content() {
         const units: TranslationUnit[] = []
         const replacements = new Map<TranslationUnit, UnitReplacement>()
         for (const element of elements) {
+            if (!staleOnly && !ignoreMutationElements.has(element)) {
+                lengthSkippedContainers.delete(element);
+                languageSkippedContainers.delete(element);
+            }
             let pending = 0
             for (const { unit, plan } of planContainerUnits(element)) {
                 if (plan.action === "skip") continue
@@ -3626,6 +3719,11 @@ export async function content() {
                 units.push(unit)
                 if (plan.action === "replace") {
                     replacements.set(unit, { bilingual: plan.bilingual, single: plan.single })
+                } else if (context?.sourceRepairRanges) {
+                    const range = unitRangeOf(unit);
+                    if (context.sourceRepairRanges.some((previous: UnitRange) => previous.start === range.start && previous.end === range.end)) {
+                        replacements.set(unit, {});
+                    }
                 }
             }
             // Nothing to settle in repair mode: these containers were never put
@@ -3696,13 +3794,49 @@ export async function content() {
         void translateUnits(fresh, undefined, errorScope, replacements)
     }
 
+    function reobserveFilteredContainer(container: UnitContainer) {
+        if (!container.isConnected) {
+            lengthSkippedContainers.delete(container);
+            languageSkippedContainers.delete(container);
+            filterRecheckContainers.delete(container);
+            return;
+        }
+        if (isIgnoreMutationElement(container)) {
+            filterRecheckContainers.add(container);
+            return;
+        }
+        paragraphElementMap.set(container, ELEMENT_STATUS.ORIGINAL);
+        unobserveContainer(intersectionObserver, container);
+        observeContainer(intersectionObserver, container);
+    }
+
+    function filterUnitsByTextLength(
+        units: TranslationUnit[], errorScope: ERROR_SCOPE_VALUE,
+        replacements?: Map<TranslationUnit, UnitReplacement>,
+    ): TranslationUnit[] {
+        if (errorScope !== ERROR_SCOPE.PAGE_TRANSLATE) return units;
+        const kept: TranslationUnit[] = [], excluded: TranslationUnit[] = [];
+        for (const unit of units) {
+            // A displayed translation must still follow its source, even when
+            // an edit shortens it. SINGLE's live DOM holds output, not source.
+            if (replacements?.has(unit) || hasMinimumTranslationTextLength(unitSourceText(unit), minTranslationTextLength)) {
+                kept.push(unit);
+            } else {
+                excluded.push(unit);
+                lengthSkippedContainers.add(unit.container);
+            }
+        }
+        settleFilteredContainers(excluded, kept);
+        return kept;
+    }
+
     /** A unit's source text, as the language filter reads it. */
     function unitSourceText(unit: TranslationUnit): string {
         return getTextNodesAndTextOfNodes(unit.nodes).text
     }
 
     /**
-     * Does the no-translate-language filter apply to this batch?
+     * Does local target-language / exclusion preflight apply to this batch?
      *
      * Not to an explicit single-paragraph gesture: the user pointed at that
      * paragraph and asked for it, which is a stronger statement than a list
@@ -3710,19 +3844,16 @@ export async function content() {
      * are covered by the same reasoning — they only ever follow a paragraph the
      * user translated by hand.
      */
-    function noTranslateLanguageFilterApplies(errorScope: ERROR_SCOPE_VALUE): boolean {
-        return noTranslateLanguages.size > 0 && errorScope === ERROR_SCOPE.PAGE_TRANSLATE
+    function localLanguageFilterApplies(errorScope: ERROR_SCOPE_VALUE): boolean {
+        return errorScope === ERROR_SCOPE.PAGE_TRANSLATE
     }
 
     /**
-     * Containers that lost every unit they had in this batch to the language
-     * filter are never coming back: the IntersectionObserver moved them to
-     * PENDING on the way in and only ever picks up ORIGINAL, and nothing
-     * downstream of the filter will see them again. Settle them here, exactly
-     * as translateParagraphElements settles a container whose units were all
-     * `skip` — otherwise they sit PENDING and observed for the page's life.
+     * Settle containers whose entire pending batch was filtered out, without
+     * creating translation records or leaving a PENDING observer behind.
+     * Filtered containers are tracked separately for source/config rechecks.
      */
-    function settleLanguageFilteredContainers(excluded: TranslationUnit[], kept: TranslationUnit[]) {
+    function settleFilteredContainers(excluded: TranslationUnit[], kept: TranslationUnit[]) {
         if (excluded.length === 0) return
         const keptContainers = new Set(kept.map(u => u.container))
         for (const container of new Set(excluded.map(u => u.container))) {
@@ -3750,6 +3881,9 @@ export async function content() {
         replacements?: Map<TranslationUnit, UnitReplacement>,
     ) {
         const snapshot = { service: translateService, targetLanguage, viewStrategy, signal: controller?.signal };
+        allUnits = filterUnitsByTextLength(
+            allUnits.filter(unit => !ignoreMutationElements.has(unit.container)), errorScope, replacements,
+        );
         const priority = (units: TranslationUnit[]) => Math.min(...units.map(unit => {
             const element = unit.container instanceof ShadowRoot ? unit.container.host : unit.container;
             if (!element.isConnected) return Infinity;
@@ -3786,45 +3920,15 @@ export async function content() {
         flushShadowRootStyles()
         // A container whose guard is already set has a translation in flight —
         // drop its units so we never translate the same text twice.
-        const guardedUnits = allUnits.filter(u => !ignoreMutationElements.has(u.container))
-        // "Do not translate these languages", pass 1: local (franc), free.
-        // Runs BEFORE the translating indicator is started, so a paragraph that
-        // never leaves this frame never flashes a spinner either.
-        //
-        // A unit being re-translated is exempt: it was vetted when it was first
-        // translated, and under SINGLE what stands in the page now is OUR
-        // OUTPUT — detecting a language from that would answer with the target
-        // language, not the paragraph's.
-        let units = guardedUnits
-        let undeterminedUnits: TranslationUnit[] = []
-        if (noTranslateLanguageFilterApplies(errorScope)) {
-            const candidates = replacements
-                ? guardedUnits.filter(u => !replacements.has(u))
-                : guardedUnits
-            const partition = partitionByLocalLanguage(candidates, unitSourceText, noTranslateLanguages)
-            // Rebuilt by subtraction rather than assembled from the partition,
-            // so the batch keeps its original order (the insertion loops walk
-            // it) and the exempt re-translations keep their place in it.
-            const dropped = new Set(partition.excluded)
-            units = guardedUnits.filter(u => !dropped.has(u))
-            undeterminedUnits = partition.undetermined
-            settleLanguageFilteredContainers(partition.excluded, units)
-        }
-        if (units.length === 0) {
-            return
-        }
-        // Every translation this frame writes passes through here, including the
-        // per-paragraph gesture that never touches the page translate switch —
-        // so this is where the rules' injectCss earns its keep. Done before the
-        // provider call rather than after the insert: the declarations exist to
-        // make room, and applying them first means one reflow instead of a
-        // visible clip-then-unclip.
-        syncSiteRuleCss(true)
+        const guardedUnits = filterUnitsByTextLength(
+            allUnits.filter(u => !ignoreMutationElements.has(u.container)), errorScope, replacements,
+        )
+        let units = guardedUnits;
+        if (units.length === 0) return;
         const mutationGuards = new Map<UnitContainer, Set<Node>>();
         const settledSourceTexts = new Map<UnitContainer, Map<Text, string>>();
         const pendingUnits = new Map<UnitContainer, number>();
-        for (const unit of units) pendingUnits.set(unit.container, (pendingUnits.get(unit.container) ?? 0) + 1);
-        const sharedContainers = new Set([...pendingUnits].filter(([, count]) => count > 1).map(([container]) => container));
+        const sharedContainers = new Set<UnitContainer>();
         const indicators = new Map<TranslationUnit, TranslateIndicatorSession>();
         const staleContainers = new Set<UnitContainer>();
         const guardMutation = (container: UnitContainer, node: Node) => {
@@ -3849,8 +3953,9 @@ export async function content() {
                 for (const [node, text] of settled ?? []) {
                     if (node.isConnected && node.textContent !== text) handleSourceTextMutation(node);
                 }
-                const needsRescan = staleContainers.delete(container)
-                    || sharedContainers.has(container) && pendingUnits.get(container) === 0;
+                const filterRecheck = filterRecheckContainers.delete(container);
+                const needsRescan = staleContainers.delete(container) || filterRecheck
+                    || (sharedContainers.has(container) || lengthSkippedContainers.has(container) || languageSkippedContainers.has(container)) && pendingUnits.get(container) === 0;
                 // Successful mixed containers also need a scan for child-list
                 // changes (new/replaced source nodes) suppressed during the wait.
                 if (needsRescan && container.isConnected) {
@@ -3868,6 +3973,34 @@ export async function content() {
             for (const container of new Set(units.map(u => u.container))) {
                 guardMutation(container, container)
             }
+            if (localLanguageFilterApplies(errorScope)) {
+                const candidates = units.filter(unit => !replacements?.has(unit));
+                const states = new Map(candidates.map(unit => [unit.container, { dirty: false }]));
+                const excludedLanguages = noTranslateLanguages;
+                for (const [container, state] of states) languagePreflights.set(container, state);
+                let excluded: TranslationUnit[];
+                try {
+                    const partition = await partitionByLocalLanguage(candidates, unitSourceText,
+                        new Set([...excludedLanguages, targetLanguage]), signal);
+                    excluded = partition.excluded;
+                } finally {
+                    for (const container of states.keys()) languagePreflights.delete(container);
+                }
+                if (signal?.aborted) return;
+                const dirty = new Set([...states].filter(([, state]) => state.dirty || excludedLanguages !== noTranslateLanguages).map(([container]) => container));
+                for (const container of dirty) staleContainers.add(container);
+                const dropped = new Set(excluded.filter(unit => !dirty.has(unit.container)));
+                for (const unit of dropped) languageSkippedContainers.add(unit.container);
+                units = units.filter(unit => !dirty.has(unit.container) && !dropped.has(unit));
+                settleFilteredContainers([...dropped], units);
+            }
+            // Settings/source can change during asynchronous local detection.
+            units = filterUnitsByTextLength(units, errorScope, replacements);
+            for (const unit of units) pendingUnits.set(unit.container, (pendingUnits.get(unit.container) ?? 0) + 1);
+            for (const [container, count] of pendingUnits) if (count > 1) sharedContainers.add(container);
+            for (const container of mutationGuards.keys()) if (!pendingUnits.has(container)) releaseMutationGuards(container);
+            if (units.length === 0 || signal?.aborted) return;
+            syncSiteRuleCss(true);
             // Started INSIDE the guard on purpose: an inline marker is a real
             // insertion into a translation container, and an unguarded one would
             // queue a mutation that re-scans the very paragraph being
@@ -3899,26 +4032,10 @@ export async function content() {
                 if (sourceText.size > 0) sourceTextOf = (node) => sourceText.get(node)
             }
 
-            // "Do not translate these languages", pass 2: the provider's word
-            // on the paragraphs franc could not name.
-            //
-            // Google / Microsoft / DeepL report a source language per text, so
-            // their own reply answers and nothing extra is sent. Everyone else
-            // (Yandex answers per batch, the AI providers not at all) gets a
-            // Microsoft detect fired CONCURRENTLY with the translation — the
-            // texts are captured here, before any write-back touches them.
-            const filterLanguages = noTranslateLanguageFilterApplies(errorScope)
-            const companionUnits = filterLanguages && needsCompanionDetect(service)
-                ? undeterminedUnits
-                : []
             const sources = new Map(units.map(unit => [unit,
                 getTextNodesAndTextOfNodes(unit.nodes).textNodes.map(node => ({ node, text: node.textContent })),
             ]));
-            const companion = companionUnits.length > 0
-                ? detectTextsLanguages(companionUnits.map(unitSourceText), signal)
-                : Promise.resolve<string[]>([]);
             const commitResults = async (result: TranslateResult) => {
-                const companionLangs = await companion;
                 const unit = result.unit!;
                 // Never overwrite a page edit or a restored/cancelled session.
                 if (signal?.aborted || !unit.container.isConnected) return;
@@ -3928,48 +4045,10 @@ export async function content() {
                 }
                 const translateResults = [result];
 
-                if (filterLanguages) {
-                    const companionLangOf = new Map<TranslationUnit, string>()
-                    companionUnits.forEach((unit, i) => companionLangOf.set(unit, companionLangs[i] ?? ""))
-                    const excluded: TranslationUnit[] = []
-                    for (let i = translateResults.length - 1; i >= 0; i--) {
-                        const result = translateResults[i]
-                        const unit = result.unit
-                        // Re-translations stay exempt on this side too, for the same
-                        // reason they were exempt from the local pass.
-                        if (!unit || replacements?.has(unit)) continue
-                        // On the per-text path the reply carries an answer for
-                        // EVERY unit, including ones franc already cleared — it is
-                        // free and better informed, so it wins over the local guess
-                        // (and replaces it in the memo).
-                        const lang = needsCompanionDetect(service) ? companionLangOf.get(unit) : result.sourceLang
-                        if (!rejectByDetectedLanguage(unitSourceText(unit), lang, noTranslateLanguages)) continue
-                        excluded.push(unit)
-                        translateResults.splice(i, 1)
-                    }
-                    settleLanguageFilteredContainers(
-                        excluded,
-                        translateResults.map(r => r.unit).filter((u): u is TranslationUnit => !!u),
-                    )
-                    if (translateResults.length === 0) {
-                        return
-                    }
-                }
-
-                // remove the unit whose language is same as targetLanguage
-                for (let i = translateResults.length - 1; i >= 0; i--) {
-                    let result = translateResults[i]
-                    if (result.sourceLang == targetLanguage && result.score >= 0.7) {
-                        translateResults.splice(i, 1)
-                        continue
-                    }
-                    result.textNodes?.forEach(text => {
-                        guardMutation(result.unit!.container, text)
-                    })
-                }
-                if (translateResults.length === 0) {
-                    return
-                }
+                // Language decisions were made locally before the request.
+                // A provider reporting one dominant language cannot erase an
+                // uncertain/mixed paragraph after it has already been translated.
+                result.textNodes?.forEach(text => guardMutation(unit.container, text));
 
                 // SINGLE is about to overwrite these nodes, so this is the last
                 // moment their source content exists anywhere. For a unit that is

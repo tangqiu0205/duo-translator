@@ -6,9 +6,9 @@ import { ManualTranslator } from '@/entrypoints/popup/ManualTranslator';
 import { emptyManualDraft, MANUAL_DRAFT_KEY, MANUAL_TEXT_LIMIT, prepareManualText, readManualDraft, readManualText } from '@/entrypoints/popup/manualTranslation';
 import { TRANSLATE_SERVICE } from '@/main/constants';
 
-const mocks = vi.hoisted(() => ({ translate: vi.fn(), detect: vi.fn(), toggle: vi.fn(), stop: vi.fn(), success: vi.fn(), copy: vi.fn() }));
+const mocks = vi.hoisted(() => ({ translate: vi.fn(), toggle: vi.fn(), stop: vi.fn(), success: vi.fn(), copy: vi.fn() }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (_key: string, fallback?: string) => fallback ?? _key }) }));
-vi.mock('@/main/translateClient', () => ({ translateTexts: mocks.translate, detectTextsLanguages: mocks.detect }));
+vi.mock('@/main/translateClient', () => ({ translateTexts: mocks.translate }));
 vi.mock('@/main/aiWriting/useTts', () => ({ useTts: () => ({ playingKey: null, toggle: mocks.toggle, stop: mocks.stop }) }));
 // Native selects exercise the state transitions without depending on Radix's
 // pointer capture / layout APIs (not implemented by jsdom).
@@ -59,7 +59,6 @@ beforeEach(() => {
   });
   vi.clearAllMocks();
   mocks.translate.mockReset();
-  mocks.detect.mockResolvedValue(['en']);
   mocks.copy.mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: mocks.copy } });
   container = document.createElement('div');
@@ -113,7 +112,7 @@ it.each(['ai:one', 'doubao', 'microsoft'])('does not send text to a separate det
   await input('private input');
   await act(async () => button('Translate').click());
   expect(container.querySelector('[role="status"]')?.textContent).toBe('你好');
-  expect(mocks.detect).not.toHaveBeenCalled();
+  expect(mocks.translate).toHaveBeenCalledTimes(1);
   expect(byLabel('Read original').disabled).toBe(true);
   expect(byLabel('Read translation').disabled).toBe(false);
   await act(async () => byLabel('Read translation').click());
@@ -131,7 +130,7 @@ it('shows the actual pool service and keeps explicit source selection available'
   expect(mocks.translate).toHaveBeenCalledWith('freeAuto', ['Hello &amp; world'], 'zh-CN', expect.any(AbortSignal), 'en');
   expect(container.querySelector('[role="status"]')?.textContent).toBe('你好 & 世界');
   expect(container.textContent).toContain('Service: google');
-  expect(mocks.detect).not.toHaveBeenCalled();
+  expect(mocks.translate).toHaveBeenCalledTimes(1);
 });
 
 it('ignores the composition Enter key, while supporting Cmd+Enter', async () => {

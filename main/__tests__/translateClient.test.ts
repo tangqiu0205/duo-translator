@@ -20,7 +20,6 @@ import {
     TranslateParams,
     parseIndexedText,
     translateTexts,
-    detectTextsLanguage,
 } from "@/main/translateClient";
 import { ACTION, AI_REQUEST_TIMEOUT, API_REQUEST_TIMEOUT, TRANSLATE_SERVICE } from "@/main/constants";
 import { sendMessageToBackground } from "@/utils/message";
@@ -192,18 +191,5 @@ describe("translateTexts", () => {
     it("returns undefined when background reports no result", async () => {
         mockSend.mockResolvedValue(null);
         expect(await translateTexts("google", ["x"], "zh-CN")).toBeUndefined();
-    });
-});
-
-describe("detectTextsLanguage", () => {
-    it("returns the detected language", async () => {
-        mockSend.mockResolvedValue({ lang: "en" });
-        expect(await detectTextsLanguage(["hello"])).toBe("en");
-        expect((mockSend.mock.calls[0][0] as any).action).toBe(ACTION.DETECT_LANGUAGE);
-    });
-
-    it("returns '' when detection is unavailable", async () => {
-        mockSend.mockResolvedValue(undefined);
-        expect(await detectTextsLanguage(["hello"])).toBe("");
     });
 });

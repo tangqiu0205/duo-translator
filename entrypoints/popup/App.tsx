@@ -120,7 +120,7 @@ export default function App({ embedded = false, uiPrefs }: AppProps = {}) {
   const [targetLanguage, setTargetLanguage] = useState(browserTargetLanguage());
   const [service, setService] = useState<string>();
   const [translateActive, setTranslateActive] = useState(false);
-  const [defaultStrategy, setDefaultStrategy] = useState<DEFAULT_STRATEGY>(DEFAULT_STRATEGY.AUTO);
+  const [defaultStrategy, setDefaultStrategy] = useState<DEFAULT_STRATEGY>(DEFAULT_VALUE.DEFAULT_STRATEGY);
   const [siteRule, setSiteRule] = useState<DOMAIN_STRATEGY>(DOMAIN_STRATEGY.AUTO);
   // Per-domain "translate all elements": drops the user's own exclusions (the
   // no-translate areas and the website rules) for this site.

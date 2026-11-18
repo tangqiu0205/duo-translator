@@ -279,15 +279,6 @@ export enum ACTION {
     // abort, so content fires this with the same requestId on signal abort;
     // background aborts the in-flight fetch for that request.
     TRANSLATE_TEXTS_ABORT = 'translateTextsAbort',
-    // Provider-backed language detection (Microsoft detect endpoint), used when
-    // local franc detection is inconclusive.
-    DETECT_LANGUAGE = 'detectLanguage',
-    // Per-text language detection: answers one language PER input instead of
-    // one dominant language for the batch. Deliberately its own action rather
-    // than a flag on DETECT_LANGUAGE — the two have different return shapes and
-    // different fallbacks (this one has no franc tie-breaker to degrade to; a
-    // failure just means "unknown", i.e. translate it).
-    DETECT_TEXTS_LANGUAGES = 'detectTextsLanguages',
     STYLE_CHANGED = 'styleChanged',
     DOMAIN_STRATEGY_CHANGED = 'domainStrategyChanged',
     // The per-domain "translate all elements" switch was flipped in the popup.
@@ -441,6 +432,8 @@ export enum CONFIG_KEY {
     // divider to be inserted between the original and translation. 0 means
     // always break (the divider is always a <br>).
     TRANSLATION_LINE_BREAK_MIN_CHARS = 'translationLineBreakMinChars',
+    // Minimum source-text length for new webpage translation units (1–20).
+    MIN_TRANSLATION_TEXT_LENGTH = 'minTranslationTextLength',
     // Persistent translation-result cache toggle (LRU, 100MB cap). Default on.
     TRANSLATION_CACHE_SWITCH = 'translationCacheSwitch',
     // Text-to-speech provider used by the selection-translate popup's play
@@ -754,7 +747,7 @@ export const DEFAULT_VALUE = {
     ERROR_TOAST_SWITCH: true,
     CONTEXT_MENU_SWITCH: true,
     VIEW_STRATEGY: 'double',
-    DEFAULT_STRATEGY: 'auto',
+    DEFAULT_STRATEGY: DEFAULT_STRATEGY.NEVER,
     AI_WRITING_SWITCH: true,
     AI_DEFAULT_ENHANCE_MODE: 'polish',
     AI_TRANSLATE_SERVICE: 'microsoft',
@@ -762,6 +755,7 @@ export const DEFAULT_VALUE = {
     BILINGUAL_HIGHLIGHTING_MIN_SENTENCES: 2,
     DOMAIN_STRATEGY: 'auto',
     TRANSLATION_LINE_BREAK_MIN_CHARS: 40,
+    MIN_TRANSLATION_TEXT_LENGTH: 2,
     TRANSLATION_CACHE_SWITCH: true,
     TTS_SERVICE: 'google',
     SYNC_INTERVAL_MINUTES: 15,

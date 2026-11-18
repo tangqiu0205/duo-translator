@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures/extension';
 import { sendAction } from '../common/utils';
+import { mockTranslateProviders } from '../mocks/translateRoutes';
 import type { Worker } from '@playwright/test';
 
 // No live provider traffic: the worker receives a synthetic, controllable SSE
@@ -148,6 +149,90 @@ test.describe('progressive webpage translation (mocked providers)', () => {
             });
             await expect(page.locator('#p10 .fluento-translation')).toContainText('「译」');
         } finally { release(); }
+    });
+
+    test('enabling the master switch starts translation when the page loaded disabled', async ({ context, page, seedConfig, serviceWorker }) => {
+        const recorder = await mockTranslateProviders(context);
+        await seedConfig({ fluento_config_globalSwitch: false });
+        await page.goto('/progressive.html');
+        await sendAction(serviceWorker, 'showOriginal'); // Wait for the disabled content pipeline.
+        expect(recorder.requests).toBe(0);
+        await serviceWorker.evaluate(async () => {
+            await chrome.storage.local.set({ fluento_config_globalSwitch: true });
+            const tab = (await chrome.tabs.query({})).find(tab => tab.url?.endsWith('/progressive.html'));
+            await chrome.tabs.sendMessage(tab!.id!, { action: 'configChanged', data: { globalSwitch: true } });
+        });
+        await expect(page.locator('#p1 .fluento-translation')).toContainText('「译」');
+    });
+
+    test('the master switch cancels a paused startup scan and can start a fresh one', async ({ context, page, seedConfig, serviceWorker, extensionId }) => {
+        await seedConfig();
+        const cdp = await context.newCDPSession(page);
+        // Park only the original startup scan, leaving the renderer, provider
+        // and next scan free to run. The delay is controlled, not a CPU race.
+        const probe = new Promise<number>(resolve => {
+            cdp.on('Runtime.executionContextCreated', ({ context: world }) => {
+                if (world.origin.startsWith(`chrome-extension://${extensionId}`) || world.name === extensionId) resolve(world.id);
+            });
+        }).then(async contextId => {
+            const run = (expression: string) => cdp.send('Runtime.evaluate', { contextId, expression });
+            const installed = await run(`(() => {
+                const post = scheduler.postTask.bind(scheduler);
+                let chunks = 0;
+                scheduler.postTask = (callback, options) => {
+                    if (options?.priority !== 'background' || ++chunks !== 3) return post(callback, options);
+                    return new Promise((resolve, reject) => {
+                        globalThis.resumeFluentoScan = () => post(callback, options).then(resolve, reject);
+                        document.documentElement.setAttribute('data-startup-paused', '');
+                    });
+                };
+            })()`);
+            expect(installed.exceptionDetails).toBeUndefined();
+            return run;
+        });
+        await cdp.send('Runtime.enable');
+        await context.route('**/startup-switch.html', route => route.fulfill({
+            contentType: 'text/html',
+            body: '<!doctype html><style>p{height:40px;margin:0}</style><article>' +
+                Array.from({ length: 12000 }, (_, i) => `<p id="p${i}">Startup fixture paragraph number ${i}.</p>`).join('') + '</article>',
+        }));
+        let release!: () => void;
+        const hold = new Promise<void>(resolve => { release = resolve; });
+        let requests = 0, firstSession = true;
+        await context.route('**/translate-pa.googleapis.com/**', async route => {
+            const texts = route.request().postDataJSON()[0][0] as string[];
+            const old = firstSession;
+            requests++;
+            if (old) await hold;
+            await route.fulfill({ json: [texts.map(text => text.replace(/(<a i=\d+>)/g, `$1${old ? 'Old' : 'New'}: `)), texts.map(() => 'en')] });
+        });
+        const setEnabled = (enabled: boolean) => serviceWorker.evaluate(async enabled => {
+            await chrome.storage.local.set({ fluento_config_globalSwitch: enabled });
+            const tab = (await chrome.tabs.query({})).find(tab => tab.url?.endsWith('/startup-switch.html'));
+            await chrome.tabs.sendMessage(tab!.id!, { action: 'configChanged', data: { globalSwitch: enabled } });
+        }, enabled);
+        try {
+            await page.goto('/startup-switch.html');
+            const run = await probe;
+            await expect(page.locator('[data-startup-paused]')).toBeAttached();
+            await expect.poll(() => requests).toBe(2);
+            await setEnabled(false);
+            release();
+            await expect(page.locator('fluento-loading')).toHaveCount(0);
+            await expect(page.locator('.fluento-translation')).toHaveCount(0);
+            expect(requests).toBe(2);
+
+            firstSession = false;
+            await setEnabled(true);
+            await expect(page.locator('#p0 .fluento-translation')).toContainText('New:');
+            await run('globalThis.resumeFluentoScan()');
+            await page.locator('#p11999').scrollIntoViewIfNeeded();
+            await expect(page.locator('#p11999 .fluento-translation')).toContainText('New:');
+            await expect(page.locator('.fluento-translation').filter({ hasText: 'Old:' })).toHaveCount(0);
+        } finally {
+            release();
+            await cdp.detach();
+        }
     });
 
     test('an edited source is not overwritten by a stale stream result and is translated again', async ({ page, seedConfig, serviceWorker }) => {

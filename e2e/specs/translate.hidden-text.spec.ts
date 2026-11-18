@@ -1,7 +1,6 @@
-// Language detection must weigh only text the reader can see
-// (main/dom/visibility.ts). Detection scores samples by byte length, so a block
-// of hidden text — an offscreen SEO copy, a screen-reader duplicate, a collapsed
-// panel — used to be able to outvote the real article and flip the verdict.
+// Local page-language detection samples text the reader can see
+// (main/dom/visibility.ts), never hidden SEO, screen-reader or collapsed copies.
+// Uncertain/mixed evidence keeps translation enabled instead of a majority vote.
 //
 // Real layout is the whole point here, which is why this lives in e2e: jsdom has
 // no boxes, so the unit suite can only pin the rules (visibility.test.ts) and the
@@ -65,8 +64,13 @@ test.describe('@hidden-text language detection', () => {
             expect(await log).toContain('zh-CN');
             await expect(page.locator('#visible .fluento-translation')).toHaveCount(0);
 
-            // Proves the negative above is a decision, not a dead content
-            // script: the same page translates on demand.
+            // Change the target to a different language before asking for a
+            // translation. Reliable same-target text now skips BEFORE requests,
+            // independently of the fake provider's detected-language metadata.
+            await serviceWorker.evaluate(async () => {
+                const tab = (await chrome.tabs.query({})).find(tab => tab.url?.includes('localhost:5566'));
+                await chrome.tabs.sendMessage(tab!.id!, { action: 'configChanged', data: { targetLanguage: 'en' } });
+            });
             await sendAction(serviceWorker, 'translate');
             await expect(page.locator('#visible .fluento-translation').first()).toBeVisible();
         });
@@ -124,7 +128,8 @@ test.describe('@hidden-text language detection', () => {
     // IntersectionObserver translates them the moment they are revealed — this
     // is what breaks if the visibility check ever leaks into marking.
     test('still translates hidden paragraphs once they are revealed', async ({ page, seedConfig }) => {
-        await seedConfig({ fluento_config_defaultStrategy: 'always' });
+        // Both the visible English and hidden Chinese differ from this target.
+        await seedConfig({ fluento_config_defaultStrategy: 'always', fluento_config_targetLanguage: 'fr' });
         // `on=ancestor` keeps each hidden <p> a paragraph of its own: a
         // display:none child is classified inline, so per-paragraph hiding would
         // collapse the whole block into a single unit on the host.

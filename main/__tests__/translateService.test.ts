@@ -396,61 +396,13 @@ describe("MicrosoftTranslateService.detectLanguage", () => {
         expect(await new MicrosoftTranslateService().detectLanguage(["a", "b"])).toBe("en");
     });
 
-    // Detection throws like every other provider call. The degrade to "" moved
-    // one level out, to detectTextsLanguage in main/translateClient.ts, which
-    // logs the reason and falls back to the local franc detector — see the
-    // `silent` reporting case there.
+    // Explicit provider capabilities still expose real failures. Webpage
+    // language filtering no longer uses this remote endpoint.
     it("throws on a non-200 response", async () => {
         routeFetch(() => reply(null, 500));
         await expect(
             new MicrosoftTranslateService().detectLanguage(["x"]),
         ).rejects.toThrow(/Microsoft Detect HTTP 500/);
-    });
-});
-
-describe("MicrosoftTranslateService.detectTextsLanguages", () => {
-    // The no-translate-language paragraph filter's fallback: the same endpoint
-    // as detectLanguage, but the answers are kept APART instead of being voted
-    // into one — the question is about each paragraph, not about the page.
-    it("answers one language per input, index-aligned", async () => {
-        routeFetch(() => reply([
-            { translations: [{ text: "a" }], detectedLanguage: { language: "en", score: 1 } },
-            { translations: [{ text: "b" }], detectedLanguage: { language: "de", score: 1 } },
-        ]));
-        expect(await new MicrosoftTranslateService().detectTextsLanguages(["a", "b"]))
-            .toEqual(["en", "de"]);
-    });
-
-    it("answers '' for an entry the endpoint did not classify — never a guess", async () => {
-        routeFetch(() => reply([
-            { translations: [{ text: "a" }] },
-            { translations: [{ text: "b" }], detectedLanguage: { language: "fr", score: 1 } },
-        ]));
-        expect(await new MicrosoftTranslateService().detectTextsLanguages(["a", "b"]))
-            .toEqual(["", "fr"]);
-    });
-
-    it("chunks a page-sized batch and reassembles it in input order", async () => {
-        const texts = Array.from({ length: 5 }, (_, i) => "x".repeat(2000) + i);
-        const langs = ["en", "de", "fr", "es", "it"];
-        let call = 0;
-        routeFetch((_url, init) => {
-            const sent: string[] = JSON.parse(String(init?.body));
-            call++;
-            return reply(sent.map((s) => ({
-                translations: [{ text: s }],
-                detectedLanguage: { language: langs[texts.indexOf(s)], score: 1 },
-            })));
-        });
-        expect(await new MicrosoftTranslateService().detectTextsLanguages(texts)).toEqual(langs);
-        // 2000 chars each against a 4500-char chunk budget — definitely split.
-        expect(call).toBeGreaterThan(1);
-    });
-
-    it("sends nothing at all for an empty batch", async () => {
-        routeFetch(() => reply(null, 500));
-        expect(await new MicrosoftTranslateService().detectTextsLanguages([])).toEqual([]);
-        expect(mockFetch).not.toHaveBeenCalled();
     });
 });
 

@@ -58,6 +58,7 @@ import {
   type StyleColorField,
 } from '@/utils/translationStyle';
 import { ServiceMark } from '@/components/ui/service-mark';
+import { MIN_TRANSLATION_TEXT_LENGTH_MIN, MIN_TRANSLATION_TEXT_LENGTH_MAX, normalizeMinTranslationTextLength } from '@/main/translationTextLength';
 import { buildServiceOptions, getTranslateService, type ServiceOption } from '@/utils/service';
 
 const MIN_SENTENCES_MIN = 1;
@@ -98,6 +99,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
   const [minSentencesInput, setMinSentencesInput] = useState<string>(
     String(DEFAULT_VALUE.BILINGUAL_HIGHLIGHTING_MIN_SENTENCES),
   );
+  const [minTextLengthInput, setMinTextLengthInput] = useState(String(DEFAULT_VALUE.MIN_TRANSLATION_TEXT_LENGTH));
   const [lineBreakInput, setLineBreakInput] = useState<string>(
     String(DEFAULT_VALUE.TRANSLATION_LINE_BREAK_MIN_CHARS),
   );
@@ -120,7 +122,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
   const [targetLang, setTargetLang] = useState<string>(browserTargetLanguage());
   const [translateService, setTranslateService] = useState<string>();
   const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([]);
-  const [defaultStrategy, setDefaultStrategy] = useState<DEFAULT_STRATEGY>(DEFAULT_STRATEGY.AUTO);
+  const [defaultStrategy, setDefaultStrategy] = useState<DEFAULT_STRATEGY>(DEFAULT_VALUE.DEFAULT_STRATEGY);
 
   // Translation style
   const [style, setStyle] = useState<string>(STYLE_NONE);
@@ -194,7 +196,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
     let cancelled = false;
     (async () => {
       const [
-        bh, fb, fbs, ta, vs, tl, ts, ds, ms, lb, tc, et, ntl,
+        bh, fb, fbs, ta, vs, tl, ts, ds, ms, lb, tc, et, ntl, minTextLength,
         styleCfg, bgCfg, bgIdxCfg, fcCfg, fcIdxCfg, bcCfg, bcIdxCfg, qbcCfg, qbcIdxCfg,
         hbCfg, hbIdxCfg, hfCfg, hfIdxCfg, hsCfg, hbcCfg, hbcIdxCfg,
       ] = await Promise.all([
@@ -211,6 +213,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
         getConfig(CONFIG_KEY.TRANSLATION_CACHE_SWITCH),
         getConfig(CONFIG_KEY.ERROR_TOAST_SWITCH),
         getConfig(CONFIG_KEY.NO_TRANSLATE_LANGUAGES),
+        getConfig(CONFIG_KEY.MIN_TRANSLATION_TEXT_LENGTH),
         getConfig(CONFIG_KEY.STYLE),
         getConfig(CONFIG_KEY.BG_COLOR),
         getConfig(CONFIG_KEY.BG_COLOR_INDEX),
@@ -240,6 +243,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
           ? clampLineBreak(lb)
           : Number(DEFAULT_VALUE.TRANSLATION_LINE_BREAK_MIN_CHARS);
       setLineBreakInput(String(initialLb));
+      setMinTextLengthInput(String(normalizeMinTranslationTextLength(minTextLength)));
       setFloatBall(fb === undefined ? true : fb);
       setFloatBallStyle(
         Object.values(FLOAT_BALL_STYLE).includes(fbs as FLOAT_BALL_STYLE)
@@ -325,6 +329,16 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
     sendMessageToAllTabs({ action: ACTION.CONFIG_CHANGED, data: { [CONFIG_KEY.BILINGUAL_HIGHLIGHTING_MIN_SENTENCES]: def } }, false)
   };
 
+  const saveMinTextLength = (value: number) => {
+    setMinTextLengthInput(String(value));
+    void setConfig(CONFIG_KEY.MIN_TRANSLATION_TEXT_LENGTH, value);
+    void sendMessageToAllTabs({ action: ACTION.CONFIG_CHANGED, data: { [CONFIG_KEY.MIN_TRANSLATION_TEXT_LENGTH]: value } }, false);
+  };
+
+  const onMinTextLengthInput = (raw: string) => {
+    if (raw === '' || /^\d{1,3}$/.test(raw)) setMinTextLengthInput(raw);
+  };
+
   const onLineBreakInput = (raw: string) => {
     if (raw === '' || /^\d{1,4}$/.test(raw)) setLineBreakInput(raw);
   };
@@ -363,11 +377,9 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
 
   const onNoTranslateLanguages = (next: string[]) => {
     setNoTranslateLanguages(next);
-    // No CONFIG_CHANGED broadcast: content reads this through the storage
-    // watcher and only applies it to the NEXT batch anyway (see the
-    // NO_TRANSLATE_LANGUAGES case in main/content.ts — an already-translated
-    // page is not retro-actively undone). Open tabs pick it up on reload.
+    // Recheck previously excluded blocks without tearing down existing output.
     void setConfig(CONFIG_KEY.NO_TRANSLATE_LANGUAGES, next);
+    void sendMessageToAllTabs({ action: ACTION.CONFIG_CHANGED, data: { [CONFIG_KEY.NO_TRANSLATE_LANGUAGES]: next } }, false);
   };
 
   const onClearCacheClick = async () => {
@@ -794,6 +806,21 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
                 ))}
               </SelectContent>
             </Select>
+          }
+        />
+        <SettingRow
+          label={t('minTranslationTextLength', 'Minimum translation text length')}
+          hint={t('minTranslationTextLengthHint', 'Skip shorter text blocks when translating webpages. Default: 2; range: 1–20. Set to 1 to disable length filtering.')}
+          control={
+            <NumberInputWithReset
+              value={minTextLengthInput}
+              min={MIN_TRANSLATION_TEXT_LENGTH_MIN}
+              max={MIN_TRANSLATION_TEXT_LENGTH_MAX}
+              defaultValue={DEFAULT_VALUE.MIN_TRANSLATION_TEXT_LENGTH}
+              onChange={onMinTextLengthInput}
+              onCommit={() => saveMinTextLength(normalizeMinTranslationTextLength(minTextLengthInput))}
+              onReset={() => saveMinTextLength(DEFAULT_VALUE.MIN_TRANSLATION_TEXT_LENGTH)}
+            />
           }
         />
         <SettingRow

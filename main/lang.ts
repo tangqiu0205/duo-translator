@@ -1,14 +1,12 @@
-// Language detection, extracted from main/content.ts. Local detection runs
-// through franc (getTextLanguage); detectLanguage samples a page's paragraphs
-// and falls back to the Microsoft detect API when the local guess is unknown.
-// The sample only counts text the reader can see (main/dom/visibility.ts) —
-// scoring is byte-weighted, so one offscreen SEO block would otherwise decide
-// the page language on its own.
+// Page decisions use the same conservative, local-only evidence as paragraph
+// exclusions. getTextLanguage remains a best-effort guess for non-filtering UI.
+// Prefer visible source text, retain paragraph boundaries, and bound both
+// sampling and browser detection. Uncertain evidence keeps translation enabled.
 import { franc } from "franc";
 import { isTraditionalChinese } from "@/utils/language";
-import { iso6393To1Map, TRANSLATE_SERVICE } from "@/main/constants";
+import { iso6393To1Map } from "@/main/constants";
 import { shuffle } from "@/utils/arrays";
-import { detectTextsLanguage } from "@/main/translateClient";
+import { detectLocalTextLanguage } from "@/main/localLanguageDetection";
 import { allParagraphs } from "@/main/dom/paragraphMarks";
 import { utf8Length } from "@/utils/text";
 import { isVisibleForDetect } from "@/main/dom/visibility";
@@ -19,10 +17,6 @@ import { isExcludedNodeType } from "@/main/dom/predicates";
 
 /** Stop growing a sample once it carries this many UTF-8 bytes. */
 const SAMPLE_BUDGET_BYTES = 2000;
-/** Below this, an element's text is too short to vote on its own. */
-const MIN_SAMPLE_BYTES = 30;
-/** Below this much sampled text, local franc is not trusted — ask the provider. */
-const MIN_LOCAL_DETECT_BYTES = 500;
 /**
  * Give up looking for visible text after this many text-bearing elements. Only
  * reached by a page whose sampled paragraphs are hidden all the way down; the
@@ -30,40 +24,30 @@ const MIN_LOCAL_DETECT_BYTES = 500;
  */
 const HIDDEN_SCAN_LIMIT = 200;
 
-interface Sample {
-    text: string;
-    len: number;
-}
-
-/**
- * One side of the sample (visible text, or the hidden fail-open pool).
- *
- * Two lists are filled in a single pass because detection needs two different
- * views of the same elements: `long` (only elements that carry enough text to
- * vote) drives the local franc pass, and `any` (every non-empty element) is what
- * gets shipped to the provider when there was not enough text for franc.
- */
+/** A UTF-8-bounded sample. Never cut a surrogate pair or retain a huge node. */
 class SampleBucket {
-    long: Sample[] = [];
-    longLen = 0;
-    any: Sample[] = [];
-    anyLen = 0;
+    samples: string[] = [];
+    private length = 0;
+    private filled = false;
 
     add(text: string, len: number) {
-        if (this.anyLen < SAMPLE_BUDGET_BYTES) {
-            this.any.push({ text, len });
-            this.anyLen += len;
+        if (this.filled) return;
+        const remaining = SAMPLE_BUDGET_BYTES - this.length;
+        if (len >= remaining) {
+            let prefix = "", bytes = 0;
+            for (const character of text) {
+                const size = utf8Length(character);
+                if (bytes + size > remaining) break;
+                prefix += character; bytes += size;
+            }
+            text = prefix; len = bytes;
+            this.filled = true;
         }
-        if (len > MIN_SAMPLE_BYTES && this.longLen < SAMPLE_BUDGET_BYTES) {
-            this.long.push({ text, len });
-            this.longLen += len;
-        }
+        if (len > 0) this.samples.push(text);
+        this.length += len;
     }
 
-    /** `any` is a superset of `long`, so this is reached exactly when `long` fills up. */
-    get full(): boolean {
-        return this.longLen >= SAMPLE_BUDGET_BYTES && this.anyLen >= SAMPLE_BUDGET_BYTES;
-    }
+    get full(): boolean { return this.filled; }
 }
 
 /**
@@ -82,16 +66,15 @@ export function getTextLanguage(text: string): string {
 }
 
 /**
- * Concatenate the rendered text of an element, skipping excluded tags
- * (script/style/svg/…) and rendered formulas. Text nodes are trimmed and
- * joined directly.
+ * Concatenate source text while preserving inline word spacing and skipping
+ * excluded tags (script/style/svg/…) and rendered formulas.
  */
 export function getElementTextContent(element: UnitContainer): string {
     let text = "";
     function traverse(node: Node) {
         if (!node) return;
         if (node.nodeType === Node.TEXT_NODE) {
-            text += node.textContent?.trim() || "";
+            text += node.textContent || "";
         } else if (node.nodeType === Node.ELEMENT_NODE || isShadowRoot(node)) {
             if (isExcludedNodeType(node)) {
                 return;
@@ -108,14 +91,13 @@ export function getElementTextContent(element: UnitContainer): string {
         }
     }
     traverse(element);
-    return text;
+    return text.trim();
 }
 
 /**
- * Detect the dominant language of a set of paragraph elements.
+ * Detect the language of a set of paragraph elements.
  */
-export async function detectLanguage(elements?: UnitContainer[]): Promise<string> {
-    let lang = "und";
+export async function detectLanguage(elements?: UnitContainer[], signal?: AbortSignal): Promise<string> {
     const pool: UnitContainer[] = elements === undefined ? allParagraphs() : elements;
 
     // Randomly sample elements
@@ -143,50 +125,27 @@ export async function detectLanguage(elements?: UnitContainer[]): Promise<string
         // Bound the scan on a page that is hidden all the way down. It counts
         // probes, NOT bytes: one oversized hidden block landing first in the
         // shuffle must never end the search for visible text.
-        if (visible.any.length === 0 && probed >= HIDDEN_SCAN_LIMIT) break
+        if (visible.samples.length === 0 && probed >= HIDDEN_SCAN_LIMIT) break
     }
     // Fail open on the whole page: a frame that was never laid out reports every
     // element as boxless, and returning "und" there would be worse than voting
     // with hidden text.
-    const sample = visible.any.length > 0 ? visible : hidden
+    const sample = visible.samples.length > 0 ? visible : hidden
 
-    let conditionElements = sample.long
-    let totalLen = sample.longLen
-    let langScoreMap: Map<string, number> = new Map()
-    let maxLangScore = 0
-    let maxLang = "und"
-    if (totalLen >= MIN_LOCAL_DETECT_BYTES) {
-        conditionElements.forEach(element => {
-            let lang = getTextLanguage(element.text)
-            let score = (langScoreMap.get(lang) || 0) + element.len
-            langScoreMap.set(lang, score)
-            if (score > maxLangScore) {
-                maxLangScore = score
-                maxLang = lang
-            }
-        })
-        if (maxLang != "und" && maxLangScore / totalLen >= 0.6) {
-            console.debug("detect language by franc: %s, divide: %f", maxLang, maxLangScore / totalLen);
-            return maxLang
-        }
-    }
-
-    // Not enough long-form text for a trustworthy local guess (or franc had no
-    // clear winner): hand the sample to the provider. Below the local threshold
-    // the short elements are worth sending too, hence the second list.
-    const needsDetectTexts = (totalLen >= MIN_LOCAL_DETECT_BYTES ? conditionElements : sample.any)
-        .map((item) => item.text);
-
-    if (needsDetectTexts.length === 0) {
-        return "und"
-    }
-
-    // Fallback: ask the Microsoft translate service to detect the language.
+    // Preserve paragraph boundaries: a small foreign/unknown block must not
+    // disappear behind a majority-language vote. No network fallback.
+    // A bounded prefix is not evidence about the whole document: foreign
+    // paragraphs may exist beyond it. Let per-unit preflight handle that page.
+    if (signal?.aborted) return "und";
+    const report = (language: string) => {
+        console.debug("detect language by local: %s", language);
+        return language;
+    };
+    if (sample.full || sample.samples.length === 0) return report("und");
     try {
-        lang = (await detectTextsLanguage(needsDetectTexts)) || "und";
-        console.debug("detect language by microsoft translate: %s", lang);
-        return lang;
-    } catch {
-        return "und";
+        return report(await detectLocalTextLanguage(sample.samples.join("\n"), signal));
+    } catch (error) {
+        if (signal?.aborted) return "und";
+        throw error;
     }
 }

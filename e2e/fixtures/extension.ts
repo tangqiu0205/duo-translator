@@ -31,12 +31,13 @@ export const DEFAULT_SEED: SeedConfig = {
 
 export const test = base.extend<{
     context: BrowserContext;
+    classicScrollbars: boolean;
     extensionId: string;
     serviceWorker: Worker;
     seedConfig: (cfg?: SeedConfig) => Promise<void>;
 }>({
-    // eslint-disable-next-line no-empty-pattern
-    context: async ({}, use) => {
+    classicScrollbars: [false, { option: true }],
+    context: async ({ classicScrollbars }, use) => {
         // Headed vs headless is a launch OPTION, not a chromium arg. Default to
         // headless (CI-friendly); set HEADED=1 (or pass --headed) to watch it in
         // a real window. `--headed` in `args` does nothing — Chrome ignores it.
@@ -44,7 +45,9 @@ export const test = base.extend<{
         const context = await chromium.launchPersistentContext('', {
             channel: 'chromium',
             headless: !headed,
+            ...(classicScrollbars ? { ignoreDefaultArgs: ['--hide-scrollbars'] } : {}),
             args: [
+                ...(classicScrollbars ? ['--disable-features=OverlayScrollbar'] : []),
                 // Old headless can't load the extension service worker; the new
                 // headless mode can. Omit when headed (would force headless).
                 ...(headed ? [] : ['--headless=new']),

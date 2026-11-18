@@ -21,7 +21,7 @@ export function buildNoTranslateLanguageSet(list: unknown): Set<string> {
     for (const item of list) {
         if (typeof item !== "string") continue;
         const tag = normalizeLanguageTag(item);
-        if (tag) set.add(tag);
+        if (tag && tag !== 'und' && tag !== 'auto') set.add(tag);
     }
     return set;
 }
@@ -36,5 +36,5 @@ export function buildNoTranslateLanguageSet(list: unknown): Set<string> {
 export function isNoTranslateLanguage(lang: string | undefined | null, set: Set<string>): boolean {
     if (set.size === 0) return false;
     const tag = normalizeLanguageTag(lang);
-    return tag !== "" && set.has(tag);
+    return tag !== "" && tag !== "und" && tag !== "auto" && set.has(tag);
 }

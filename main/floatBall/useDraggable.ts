@@ -12,6 +12,12 @@ export type Dock = "left" | "right" | null;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
+// Resolve the right edge against the fixed containing block, not a snapshot
+// of clientWidth. Scrollbars can change it without resizing <html> or window.
+// Keep using left so snapping can still animate from the drag's pixel offset.
+const horizontalPosition = (dock: Dock, x: number, width: number) =>
+    dock === "right" ? `max(0px, calc(100% - ${width}px))` : dock === "left" ? "0px" : `${x}px`;
+
 /**
  * Drag + edge-docking + viewport-relative position persistence for the float
  * ball.
@@ -62,7 +68,7 @@ export function useDraggable(
         onDockedRef.current = onDocked;
     }, [onDocked]);
 
-    // ---- Initial placement (config or default docked bottom-right) ---------
+    // ---- Initial placement (saved position or default docked bottom-left) ---------
     useLayoutEffect(() => {
         const el = ref.current;
         if (!el) return;
@@ -119,14 +125,14 @@ export function useDraggable(
                     }
                 }
             } else {
-                // Default: docked to the right edge, a bit up from the bottom.
-                x = screenW - w;
+                // Default: docked to the left edge, a bit up from the bottom.
+                x = 0;
                 y = screenH > h * 5 ? screenH - h * 5 : 0;
-                s.xPercent = Math.round(((x + w) / screenW) * 100);
+                s.xPercent = Math.round((w / screenW) * 100);
                 s.yPercent = Math.round(((y + h) / screenH) * 100);
-                s.dock = "right";
+                s.dock = "left";
             }
-            el.style.left = `${x}px`;
+            el.style.left = horizontalPosition(s.dock, x, w);
             el.style.top = `${y}px`;
             if (style === FLOAT_BALL_STYLE.DOCKED && ownPosition == null) {
                 void setConfig(positionKey, {
@@ -205,7 +211,7 @@ export function useDraggable(
                     if (ref.current) ref.current.style.transition = "";
                 }, 200);
             }
-            el.style.left = `${x}px`;
+            el.style.left = horizontalPosition(nextDock, x, w);
             el.style.top = `${y}px`;
 
             const nx = Math.round(((x + w) / s.screenW) * 100);
@@ -229,23 +235,17 @@ export function useDraggable(
             s.screenH = vp.height;
             const w = el.offsetWidth;
             const h = el.offsetHeight;
-            // Docked balls stay flush to their edge; free ones reposition by %.
-            let left: number;
-            if (s.dock === "left") left = 0;
-            else if (s.dock === "right") left = Math.max(0, s.screenW - w);
-            else left = clamp((s.xPercent * s.screenW) / 100 - w, 0, Math.max(0, s.screenW - w));
+            const left = clamp((s.xPercent * s.screenW) / 100 - w, 0, Math.max(0, s.screenW - w));
             const top = clamp((s.yPercent * s.screenH) / 100 - h, 0, Math.max(0, s.screenH - h));
-            el.style.left = `${left}px`;
+            el.style.left = horizontalPosition(s.dock, left, w);
             el.style.top = `${top}px`;
         };
 
         window.addEventListener("mousemove", onMove);
         document.addEventListener("mouseup", onUp);
         window.addEventListener("resize", onResize);
-        // A window `resize` event does NOT fire when a scrollbar merely appears
-        // or disappears, yet that changes documentElement.clientWidth — which
-        // would leave a right-docked ball stranded behind/past the new scrollbar.
-        // Observe the document element directly to re-flush on those changes.
+        // Reposition the vertical and free-floating offsets on document size
+        // changes as well. Docked horizontal placement follows CSS directly.
         const ro = new ResizeObserver(() => onResize());
         ro.observe(document.documentElement);
         return () => {

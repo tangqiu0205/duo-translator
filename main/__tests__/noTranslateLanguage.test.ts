@@ -1,34 +1,16 @@
 // Unit tests for the "do not translate these languages" logic:
 //   - main/noTranslateLanguage.ts       (tag comparison, shared by all three consumers)
-//   - main/noTranslateLanguageFilter.ts (the per-paragraph passes + the memo)
+//   - main/noTranslateLanguageFilter.ts (the local request-time precheck)
 //   - main/strategy.ts                  (the page-level AUTO decision)
 // All DOM-free, so they run in the default node environment.
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-
-vi.mock("franc", () => ({ franc: vi.fn() }));
-vi.mock("@/utils/language", () => ({ isTraditionalChinese: vi.fn(() => false) }));
-
-import { franc } from "franc";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+const { localDetect } = vi.hoisted(() => ({ localDetect: vi.fn() }));
+vi.mock("@/main/localLanguageDetection", () => ({ shouldSkipLocalText: localDetect }));
 import { buildNoTranslateLanguageSet, isNoTranslateLanguage } from "@/main/noTranslateLanguage";
-import {
-    needsCompanionDetect,
-    partitionByLocalLanguage,
-    rejectByDetectedLanguage,
-    reportsPerTextSourceLang,
-    resetDetectedLanguageCache,
-} from "@/main/noTranslateLanguageFilter";
+import { partitionByLocalLanguage } from "@/main/noTranslateLanguageFilter";
 import { needsTranslate } from "@/main/strategy";
-import { AI_PREFIX, DEFAULT_STRATEGY, DOMAIN_STRATEGY, TRANSLATE_SERVICE } from "@/main/constants";
-
-const mockFranc = franc as unknown as Mock;
-
-/** Long enough to clear LOCAL_DETECT_MIN_BYTES (200 UTF-8 bytes). */
-const longText = (seed: string) => seed.repeat(Math.ceil(240 / seed.length));
-
-beforeEach(() => {
-    mockFranc.mockReset();
-    resetDetectedLanguageCache();
-});
+import { DEFAULT_STRATEGY, DOMAIN_STRATEGY } from "@/main/constants";
+beforeEach(() => { localDetect.mockReset(); });
 
 // ---------------------------------------------------------------------------
 // buildNoTranslateLanguageSet / isNoTranslateLanguage
@@ -65,6 +47,9 @@ describe("isNoTranslateLanguage", () => {
         expect(isNoTranslateLanguage("", set)).toBe(false);
         expect(isNoTranslateLanguage(undefined, set)).toBe(false);
         expect(isNoTranslateLanguage(null, set)).toBe(false);
+        expect(isNoTranslateLanguage("und", new Set(["und"]))).toBe(false);
+        expect(isNoTranslateLanguage("auto", new Set(["auto"]))).toBe(false);
+        expect(buildNoTranslateLanguageSet(["und", "auto"]).size).toBe(0);
     });
 
     it("is off entirely when nothing is configured", () => {
@@ -72,119 +57,33 @@ describe("isNoTranslateLanguage", () => {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Which provider can answer per paragraph
-// ---------------------------------------------------------------------------
-describe("provider capability split", () => {
-    it("lists providers that report a source language per text", () => {
-        for (const s of [
-            TRANSLATE_SERVICE.GOOGLE,
-            TRANSLATE_SERVICE.MICROSOFT,
-            TRANSLATE_SERVICE.AZURE,
-            TRANSLATE_SERVICE.GOOGLE_CLOUD,
-            TRANSLATE_SERVICE.DEEPL,
-        ]) {
-            expect(reportsPerTextSourceLang(s)).toBe(true);
-            expect(needsCompanionDetect(s)).toBe(false);
-        }
+describe("request-time local language filtering", () => {
+    const id = (text: string) => text;
+    it("excludes only confidently identified configured languages", async () => {
+        localDetect.mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+        expect(await partitionByLocalLanguage(["English", "Deutsch", "ambiguous"], id, new Set(["en"])))
+            .toEqual({ excluded: ["English"], keep: ["Deutsch", "ambiguous"] });
     });
-
-    it("sends everyone else — including an unknown future provider — to the companion detect", () => {
-        for (const s of [TRANSLATE_SERVICE.BAIDU, TRANSLATE_SERVICE.YANDEX, TRANSLATE_SERVICE.BUILTIN, `${AI_PREFIX}abc`, "brand-new"]) {
-            expect(reportsPerTextSourceLang(s)).toBe(false);
-            expect(needsCompanionDetect(s)).toBe(true);
-        }
+    it("does not inspect text when the exclusion set is empty", async () => {
+        expect(await partitionByLocalLanguage(["hello"], id, new Set())).toEqual({ excluded: [], keep: ["hello"] });
+        expect(localDetect).not.toHaveBeenCalled();
     });
-});
-
-// ---------------------------------------------------------------------------
-// Pass 1 — local (franc)
-// ---------------------------------------------------------------------------
-describe("partitionByLocalLanguage", () => {
-    const set = buildNoTranslateLanguageSet(["en"]);
-    const id = (s: string) => s;
-
-    it("drops a long paragraph franc names as a no-translate language", () => {
-        mockFranc.mockReturnValue("eng");
-        const text = longText("hello world ");
-        const out = partitionByLocalLanguage([text], id, set);
-        expect(out.excluded).toEqual([text]);
-        expect(out.keep).toEqual([]);
-        expect(out.undetermined).toEqual([]);
+    it("uses the current configured list instead of caching exclusion verdicts", async () => {
+        localDetect.mockImplementation(async (_text, languages: Set<string>) => languages.has('en'));
+        expect((await partitionByLocalLanguage(["hello"], id, new Set(["en"]))).excluded).toEqual(["hello"]);
+        expect((await partitionByLocalLanguage(["hello"], id, new Set(["de"]))).keep).toEqual(["hello"]);
     });
-
-    it("keeps a long paragraph in another language and does NOT re-ask the provider about it", () => {
-        mockFranc.mockReturnValue("deu");
-        const text = longText("guten tag welt ");
-        const out = partitionByLocalLanguage([text], id, set);
-        expect(out.keep).toEqual([text]);
-        // franc already answered; only unnamed paragraphs go to pass 2.
-        expect(out.undetermined).toEqual([]);
+    it("keeps a source edited while asynchronous local detection is running", async () => {
+        const item = { text: "original" };
+        localDetect.mockImplementation(async () => { item.text = "edited"; return true; });
+        expect((await partitionByLocalLanguage([item], value => value.text, new Set(["en"]))).keep).toEqual([item]);
     });
-
-    it("never hands short text to franc — it goes to the provider pass instead", () => {
-        const out = partitionByLocalLanguage(["hi"], id, set);
-        expect(mockFranc).not.toHaveBeenCalled();
-        expect(out.keep).toEqual(["hi"]);
-        expect(out.undetermined).toEqual(["hi"]);
-    });
-
-    it("treats franc's 'und' as unknown, not as a verdict", () => {
-        mockFranc.mockReturnValue("und");
-        const text = longText("?!?! ");
-        const out = partitionByLocalLanguage([text], id, set);
-        expect(out.excluded).toEqual([]);
-        expect(out.undetermined).toEqual([text]);
-    });
-
-    it("memoizes, so a re-scan of the same page costs no second detection", () => {
-        mockFranc.mockReturnValue("eng");
-        const text = longText("hello world ");
-        partitionByLocalLanguage([text], id, set);
-        partitionByLocalLanguage([text], id, set);
-        expect(mockFranc).toHaveBeenCalledTimes(1);
-    });
-
-    it("stores the language rather than the verdict, so editing the list takes effect", () => {
-        mockFranc.mockReturnValue("eng");
-        const text = longText("hello world ");
-        expect(partitionByLocalLanguage([text], id, set).excluded).toEqual([text]);
-        // Same cached "en", different configured list → opposite answer.
-        const other = buildNoTranslateLanguageSet(["de"]);
-        expect(partitionByLocalLanguage([text], id, other).keep).toEqual([text]);
-    });
-
-    it("is a no-op when nothing is configured", () => {
-        mockFranc.mockReturnValue("eng");
-        const text = longText("hello world ");
-        const out = partitionByLocalLanguage([text], id, new Set());
-        expect(out.excluded).toEqual([]);
-        expect(out.keep).toEqual([text]);
-    });
-});
-
-// ---------------------------------------------------------------------------
-// Pass 2 — the provider's word
-// ---------------------------------------------------------------------------
-describe("rejectByDetectedLanguage", () => {
-    const set = buildNoTranslateLanguageSet(["en"]);
-
-    it("rejects a match and accepts anything else", () => {
-        expect(rejectByDetectedLanguage("some text", "en-GB", set)).toBe(true);
-        expect(rejectByDetectedLanguage("some text", "de", set)).toBe(false);
-    });
-
-    it("treats a missing answer exactly like never having asked", () => {
-        expect(rejectByDetectedLanguage("some text", "", set)).toBe(false);
-        expect(rejectByDetectedLanguage("some text", undefined, set)).toBe(false);
-    });
-
-    it("feeds the memo, so the same paragraph is dropped locally next time", () => {
-        const text = longText("hello world ");
-        expect(rejectByDetectedLanguage(text, "en", set)).toBe(true);
-        const out = partitionByLocalLanguage([text], (s) => s, set);
-        expect(out.excluded).toEqual([text]);
-        expect(mockFranc).not.toHaveBeenCalled();
+    it("forwards cancellation without turning it into an exclusion", async () => {
+        const controller = new AbortController();
+        localDetect.mockRejectedValue(new DOMException("Aborted", "AbortError"));
+        await expect(partitionByLocalLanguage(["hello"], id, new Set(["en"]), controller.signal))
+            .rejects.toMatchObject({ name: "AbortError" });
+        expect(localDetect).toHaveBeenCalledWith("hello", new Set(["en"]), controller.signal);
     });
 });
 

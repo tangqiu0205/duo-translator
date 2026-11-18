@@ -1,148 +1,77 @@
 // @vitest-environment jsdom
-//
-// Tests for main/lang/detect.ts's DOM-driven detection: getElementTextContent
-// and detectLanguage (including the Microsoft-translate fallback). The
-// translation service registry and franc are mocked so the fallback and the
-// sampling/threshold logic can be exercised deterministically.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockFranc, mockMsDetect, mockIsVisible } = vi.hoisted(() => ({
-    mockFranc: vi.fn(),
-    mockMsDetect: vi.fn(),
-    mockIsVisible: vi.fn(),
-}));
+const mocks = vi.hoisted(() => ({ local: vi.fn(), visible: vi.fn(), network: vi.fn() }));
+vi.mock('@/main/localLanguageDetection', () => ({ detectLocalTextLanguage: mocks.local }));
+vi.mock('@/utils/arrays', () => ({ shuffle: (items: unknown[]) => items }));
+vi.mock('@/main/dom/visibility', () => ({ isVisibleForDetect: mocks.visible }));
+vi.mock('@/utils/message', () => ({ sendMessageToBackgroundOrThrow: mocks.network, sendMessageToBackground: mocks.network }));
+import { getElementTextContent, detectLanguage } from '@/main/lang';
 
-vi.mock("franc", () => ({ franc: mockFranc }));
-vi.mock("@/utils/language", () => ({ isTraditionalChinese: vi.fn(() => false) }));
-// shuffle -> identity so the sampling order is deterministic in tests.
-vi.mock("@/utils/arrays", () => ({ shuffle: (a: unknown[]) => a }));
-// Provider-backed detection now goes to background through this one client
-// function (the provider classes live in main/translateService.ts).
-vi.mock("@/main/translateClient", () => ({
-    detectTextsLanguage: mockMsDetect,
-}));
-// Visibility is a layout question and jsdom has no layout — the real predicate
-// is pinned by visibility.test.ts (rules) and e2e (real boxes). Here it is a
-// switch, so the sampling logic around it can be driven directly.
-vi.mock("@/main/dom/visibility", () => ({ isVisibleForDetect: mockIsVisible }));
-
-import { getElementTextContent, detectLanguage } from "@/main/lang";
-
-function el(html: string): HTMLElement {
-    document.body.innerHTML = html;
-    return document.body.firstElementChild as HTMLElement;
-}
-
-/** A paragraph whose text content is exactly `text`. */
-function para(text: string): HTMLElement {
-    const p = document.createElement("p");
-    p.textContent = text;
-    return p;
-}
-
+function para(text: string): HTMLElement { const p = document.createElement('p'); p.textContent = text; return p; }
 beforeEach(() => {
-    vi.clearAllMocks();
-    // Implementation, not mockReturnValue: a return value would take precedence
-    // over the per-test mockImplementation below (vitest 4 semantics).
-    mockIsVisible.mockImplementation(() => true);
-    document.body.innerHTML = "";
+    vi.clearAllMocks(); mocks.local.mockReset().mockResolvedValue('und');
+    mocks.visible.mockImplementation(() => true); document.body.innerHTML = '';
 });
 
-// ---------------------------------------------------------------------------
-// getElementTextContent
-// ---------------------------------------------------------------------------
-describe("getElementTextContent", () => {
-    it("concatenates trimmed text from the subtree", () => {
-        expect(getElementTextContent(el("<p>Hello <b>world</b></p>"))).toBe("Helloworld");
+describe('page-language source extraction', () => {
+    it('preserves spaces between inline words and skips script/style text', () => {
+        document.body.innerHTML = '<p>Hello <b>world</b> again<script>hidden()</script><style>body{}</style></p>';
+        expect(getElementTextContent(document.body.firstElementChild! as HTMLElement)).toBe('Hello world again');
     });
-
-    it("skips excluded tags (script/style)", () => {
-        expect(getElementTextContent(el("<p>Hi<script>x()</script><style>a{}</style></p>"))).toBe("Hi");
+    it('trims the outer whitespace without inventing spacing between adjacent inline characters', () => {
+        document.body.innerHTML = '<p>  <b>网</b><i>页</i>  </p>';
+        expect(getElementTextContent(document.body.firstElementChild! as HTMLElement)).toBe('网页');
     });
 });
 
-// ---------------------------------------------------------------------------
-// detectLanguage
-// ---------------------------------------------------------------------------
-describe("detectLanguage", () => {
-    it("returns 'und' for an empty element list without hitting the network", async () => {
-        expect(await detectLanguage([])).toBe("und");
-        expect(mockMsDetect).not.toHaveBeenCalled();
+describe('local-only page detection', () => {
+    it('does not invoke detection for an empty page', async () => {
+        expect(await detectLanguage([])).toBe('und'); expect(mocks.local).not.toHaveBeenCalled();
     });
-
-    it("uses the local franc result when there is enough text (>500 bytes)", async () => {
-        mockFranc.mockReturnValue("eng");
-        const long = para("a".repeat(600));
-        const lang = await detectLanguage([long]);
-        expect(lang).toBe("en");
-        expect(mockMsDetect).not.toHaveBeenCalled();
+    it('uses the shared local result and never asks a translation provider', async () => {
+        mocks.local.mockResolvedValue('en');
+        expect(await detectLanguage([para('English source paragraph')])).toBe('en');
+        expect(mocks.local).toHaveBeenCalledWith('English source paragraph', undefined);
+        expect(mocks.network).not.toHaveBeenCalled();
     });
-
-    it("falls back to the Microsoft detect service for short text", async () => {
-        mockMsDetect.mockResolvedValue("es");
-        const lang = await detectLanguage([para("hola")]);
-        expect(lang).toBe("es");
-        // text is the element content plus the per-element newline separator.
-        expect(mockMsDetect).toHaveBeenCalledWith(["hola"]);
+    it('preserves paragraph boundaries for mixed-language detection instead of a majority vote', async () => {
+        expect(await detectLanguage([para('English paragraph'), para('Texte français')])).toBe('und');
+        expect(mocks.local).toHaveBeenCalledWith('English paragraph\nTexte français', undefined);
+        expect(mocks.network).not.toHaveBeenCalled();
     });
-
-    it("returns 'und' when the Microsoft fallback rejects", async () => {
-        mockMsDetect.mockRejectedValue(new Error("network"));
-        expect(await detectLanguage([para("bonjour")])).toBe("und");
+    it('does not send uncertain short text to Microsoft or another provider', async () => {
+        expect(await detectLanguage([para('bonjour')])).toBe('und');
+        expect(mocks.network).not.toHaveBeenCalled();
     });
-
-    it("returns 'und' when the Microsoft fallback yields nothing", async () => {
-        mockMsDetect.mockResolvedValue("");
-        expect(await detectLanguage([para("ciao")])).toBe("und");
+    it('uses visible text instead of hidden long-form content', async () => {
+        const hidden = para('hidden '.repeat(1000));
+        mocks.visible.mockImplementation(element => element !== hidden);
+        await detectLanguage([hidden, para('visible source')]);
+        expect(mocks.local).toHaveBeenCalledWith('visible source', undefined);
     });
-});
-
-// ---------------------------------------------------------------------------
-// Hidden text must not vote (main/dom/visibility.ts)
-// ---------------------------------------------------------------------------
-describe("detectLanguage — hidden text", () => {
-    it("keeps hidden paragraphs out of the local franc vote", async () => {
-        // Scoring is byte-weighted, so the hidden block would win outright.
-        const visibleText = "b".repeat(600);
-        const visibleEl = para(visibleText);
-        const hiddenEl = para("a".repeat(5000));
-        mockIsVisible.mockImplementation((el: HTMLElement) => el === visibleEl);
-        mockFranc.mockReturnValue("eng");
-
-        expect(await detectLanguage([hiddenEl, visibleEl])).toBe("en");
-        // Only the visible text was ever scored.
-        expect(mockFranc).toHaveBeenCalledTimes(1);
-        expect(mockFranc).toHaveBeenCalledWith(visibleText, expect.anything());
+    it('uses hidden text only if the visible sample is empty and complete', async () => {
+        mocks.visible.mockReturnValue(false); mocks.local.mockResolvedValue('en');
+        expect(await detectLanguage([para('hidden source')])).toBe('en');
+        expect(mocks.local).toHaveBeenCalledWith('hidden source', undefined);
     });
-
-    it("sends only visible text to the provider fallback", async () => {
-        const hiddenEl = para("a".repeat(5000));
-        mockIsVisible.mockImplementation((el: HTMLElement) => el !== hiddenEl);
-        mockMsDetect.mockResolvedValue("es");
-
-        expect(await detectLanguage([hiddenEl, para("hola")])).toBe("es");
-        expect(mockMsDetect).toHaveBeenCalledWith(["hola"]);
+    it('does not classify an entire page by a truncated hidden prefix', async () => {
+        mocks.visible.mockReturnValue(false); mocks.local.mockResolvedValue('en');
+        expect(await detectLanguage([para('a'.repeat(10_000))])).toBe('und');
+        expect(mocks.local).not.toHaveBeenCalled();
     });
-
-    it("prefers short visible text over long hidden text", async () => {
-        // Visible sample is below the local-detect threshold, so it goes to the
-        // provider — it must NOT reach back for the long hidden block instead.
-        const hiddenEl = para("a".repeat(5000));
-        mockIsVisible.mockImplementation((el: HTMLElement) => el !== hiddenEl);
-        mockMsDetect.mockResolvedValue("fr");
-
-        expect(await detectLanguage([hiddenEl, para("bonjour tout le monde")])).toBe("fr");
-        expect(mockFranc).not.toHaveBeenCalled();
-        expect(mockMsDetect).toHaveBeenCalledWith(["bonjour tout le monde"]);
+    it('keeps oversized multibyte pages unknown rather than guessing from a prefix', async () => {
+        expect(await detectLanguage([para('😀'.repeat(2000))])).toBe('und');
+        expect(mocks.local).not.toHaveBeenCalled();
     });
-
-    it("falls open to hidden text when nothing is visible", async () => {
-        // A frame that was never laid out reports every element as boxless;
-        // voting with hidden text beats returning "und".
-        mockIsVisible.mockImplementation(() => false);
-        mockFranc.mockReturnValue("eng");
-
-        expect(await detectLanguage([para("a".repeat(600))])).toBe("en");
-        expect(mockMsDetect).not.toHaveBeenCalled();
+    it('does not continue an aborted page decision', async () => {
+        const controller = new AbortController(); controller.abort();
+        expect(await detectLanguage([para('source')], controller.signal)).toBe('und');
+        expect(mocks.local).not.toHaveBeenCalled();
+    });
+    it('forwards cancellation and returns unknown rather than enabling a stale decision', async () => {
+        const controller = new AbortController();
+        mocks.local.mockImplementation(async () => { controller.abort(); throw new DOMException('Aborted', 'AbortError'); });
+        expect(await detectLanguage([para('source')], controller.signal)).toBe('und');
     });
 });

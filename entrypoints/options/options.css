@@ -78,6 +78,8 @@ html[data-theme="light"] {
    CONFIG_KEY.THEME, and the user can pin light on a dark OS or the reverse. */
 html {
   color-scheme: dark;
+  /* Keep the centered layout from shifting when a tab starts to scroll. */
+  scrollbar-gutter: stable;
 }
 
 html,

@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   ],
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (_key: string, fallback?: string) => fallback ?? _key }) }));
-vi.mock('wxt/browser', () => ({ browser: { runtime: { getManifest: () => ({ version: '2.2.6' }), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } }, tabs: { create: vi.fn() } } }));
+vi.mock('wxt/browser', () => ({ browser: { runtime: { getManifest: () => ({ version: '1.0.0' }), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } }, tabs: { create: vi.fn() } } }));
 vi.mock('@/utils/message', () => ({ sendMessageToBackground: mocks.send, sendMessageToTab: vi.fn(async () => {}), sendMessageToAllTabs: vi.fn(async () => {}) }));
 vi.mock('@/utils/popupPrefs', () => ({ usePopupPrefs: () => mocks.ui, loadPopupPrefs: async () => mocks.ui }));
 vi.mock('@/utils/theme', () => ({ useThemeSetting: () => 'light', useResolvedTheme: () => 'light', THEME_OPTIONS: [] }));

@@ -145,7 +145,7 @@ describe("formulas and text collection", () => {
 
     it("the language sample leaves formula text out", () => {
         const p = el(`<p>A skill ${katex("sss")} maps.</p>`);
-        expect(getElementTextContent(p)).toBe("A skillmaps.");
+        expect(getElementTextContent(p)).toBe("A skill  maps.");
     });
 
     it("a translated unit holding a formula is still accounted for (no perpetual re-translation)", () => {
