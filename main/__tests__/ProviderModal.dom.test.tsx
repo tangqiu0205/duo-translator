@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProviderModal } from '@/components/options/ProviderModal';
 import { ACTION, STATUS_SUCCESS, STATUS_FAIL } from '@/main/constants';
-import { AiProvider, normalizeProvider } from '@/main/aiProvider';
+import { AiProvider, getCatalogEntry, normalizeProvider } from '@/main/aiProvider';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), t: (_key: string, fallback?: string, options?: { count: number }) => (fallback ?? _key).replace('{{count}}', String(options?.count)) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: mocks.t }) }));
@@ -25,6 +25,25 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
+it('shows the selected provider template beside the URL label and fills it on demand', async () => {
+    const customUrl = 'https://gateway.example.com/v1/chat/completions';
+    const template = getCatalogEntry('openai').defaultUrl;
+    await render(normalizeProvider({ ...draft, type: 'openai', url: customUrl, model: 'model' }));
+    const templateButton = button(template);
+    const label = templateButton.previousElementSibling as HTMLLabelElement;
+    expect(label.textContent).toBe('URL*');
+    const input = label.control as HTMLInputElement;
+    expect(input.value).toBe(customUrl);
+    await act(async () => templateButton.click());
+    expect(input.value).toBe(template);
+    expect(mocks.send).not.toHaveBeenCalled();
+});
+
+it('hides the template when the provider has no preset URL', async () => {
+    await render();
+    expect(document.querySelector('[title="Use URL template"]')).toBeNull();
+});
+
 it('fetches using the unsaved draft with an empty model, then offers the returned model', async () => {
     mocks.send.mockResolvedValue({ status: STATUS_SUCCESS, data: { models: ['auto', 'local-model'] } });
     await render();
@@ -34,6 +53,14 @@ it('fetches using the unsaved draft with an empty model, then offers the returne
     expect(document.querySelectorAll('[role="combobox"]')[1].textContent).toContain('auto');
     expect(document.querySelector('[role="status"]')?.textContent).toBe('Fetched 2 models');
 });
+it('does not show Test success for an empty reply', async () => {
+    mocks.send.mockResolvedValue({ status: STATUS_SUCCESS, data: { reply: '   ' } });
+    await render(normalizeProvider({ ...draft, model: 'local-model' }));
+    await act(async () => button('Test').click());
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ action: ACTION.AI_PROVIDER_TEST }));
+    expect(document.body.textContent).toContain('The translation service returned no text.');
+});
+
 it('keeps the current selected model when it is missing from the fetched list', async () => {
     mocks.send.mockResolvedValue({ status: STATUS_SUCCESS, data: { models: ['other'] } });
     await render(normalizeProvider({ ...draft, model: 'auto' }));

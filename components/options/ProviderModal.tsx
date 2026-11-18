@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { browser } from 'wxt/browser';
 import { ACTION, STATUS_SUCCESS } from '@/main/constants';
@@ -33,6 +33,7 @@ const newProviderId = () =>
 export function ProviderModal({ open, initial, onClose, onSave }: Props) {
     const { t } = useTranslation();
     const isEdit = !!initial;
+    const urlId = useId();
 
     const [type, setType] = useState<AiProviderType>(initial?.type ?? 'openai');
     const [name, setName] = useState(initial?.name ?? getCatalogEntry('openai').label);
@@ -184,7 +185,9 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
                 data: buildProvider(),
             });
             if (resp?.status === STATUS_SUCCESS) {
-                setTestReply({ ok: true, text: resp.data?.reply || 'OK' });
+                const reply = resp.data?.reply;
+                if (typeof reply === 'string' && reply.trim()) setTestReply({ ok: true, text: reply });
+                else setTestReply({ ok: false, text: t('popupEmptyResult', 'The translation service returned no text.') });
             } else {
                 setTestReply({ ok: false, text: resp?.data?.message || 'Failed' });
             }
@@ -267,8 +270,29 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
                     />
                 </Field>
 
-                <Field label={t('aiProviderUrl', 'URL')} required>
+                <Field
+                    label={t('aiProviderUrl', 'URL')}
+                    htmlFor={urlId}
+                    required
+                    labelAside={entry.defaultUrl && (
+                        <button
+                            type="button"
+                            className="min-w-0 break-all rounded text-left font-mono text-[11px] text-accent underline decoration-dotted underline-offset-2 hover:text-accent-strong focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
+                            title={t('aiUseUrlTemplate', 'Use URL template')}
+                            aria-label={`${t('aiUseUrlTemplate', 'Use URL template')}: ${entry.defaultUrl}`}
+                            disabled={testing || saving}
+                            onClick={() => {
+                                if (url !== entry.defaultUrl) setTestReply(null);
+                                setUrl(entry.defaultUrl);
+                                setUrlDirty(false);
+                            }}
+                        >
+                            {entry.defaultUrl}
+                        </button>
+                    )}
+                >
                     <Input
+                        id={urlId}
                         value={url}
                         onChange={(e) => {
                             setUrl(e.target.value);
@@ -385,21 +409,28 @@ export function ProviderModal({ open, initial, onClose, onSave }: Props) {
 
 function Field({
     label,
+    htmlFor,
     required,
     hint,
+    labelAside,
     children,
 }: {
     label: string;
+    htmlFor?: string;
     required?: boolean;
     hint?: string;
+    labelAside?: React.ReactNode;
     children: React.ReactNode;
 }) {
     return (
         <div className="flex flex-col gap-1">
-            <label className="flex items-center gap-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-mute">
-                {label}
-                {required && <span className="text-red-500">*</span>}
-            </label>
+            <div className="flex items-baseline gap-2">
+                <label htmlFor={htmlFor} className="flex shrink-0 items-center gap-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-mute">
+                    {label}
+                    {required && <span className="text-red-500">*</span>}
+                </label>
+                {labelAside}
+            </div>
             {children}
             {hint && <p className="text-[11px] text-ink-mute">{hint}</p>}
         </div>

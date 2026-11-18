@@ -347,6 +347,7 @@
   "aiSave": "Salvar",
   "aiProviderType": "Tipo",
   "aiProviderUrl": "URL",
+  "aiUseUrlTemplate": "Usar modelo de URL",
   "aiUrlTemplateHint": "Os marcadores {model} e {key} são substituídos automaticamente.",
   "aiApiKeyOptionalHint": "Opcional para este tipo de provedor.",
   "translateServiceTest": "Teste",

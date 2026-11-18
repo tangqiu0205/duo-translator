@@ -347,6 +347,7 @@
   "aiSave": "Speichern",
   "aiProviderType": "Typ",
   "aiProviderUrl": "URL",
+  "aiUseUrlTemplate": "URL-Vorlage einsetzen",
   "aiUrlTemplateHint": "Die Platzhalter {model} und {key} werden automatisch ersetzt.",
   "aiApiKeyOptionalHint": "Für diesen Anbietertyp optional.",
   "translateServiceTest": "Prüfen",

@@ -347,6 +347,7 @@
   "aiSave": "Сохранять",
   "aiProviderType": "Тип",
   "aiProviderUrl": "URL",
+  "aiUseUrlTemplate": "Использовать шаблон URL",
   "aiUrlTemplateHint": "Заполнители {model} и {key} автоматически подставляются.",
   "aiApiKeyOptionalHint": "Для данного типа поставщика услуг это необязательно.",
   "translateServiceTest": "Тест",

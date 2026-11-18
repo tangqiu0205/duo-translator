@@ -129,7 +129,9 @@ it('shows the actual pool service and keeps explicit source selection available'
   await act(async () => button('Translate').click());
   expect(mocks.translate).toHaveBeenCalledWith('freeAuto', ['Hello &amp; world'], 'zh-CN', expect.any(AbortSignal), 'en');
   expect(container.querySelector('[role="status"]')?.textContent).toBe('你好 & 世界');
-  expect(container.textContent).toContain('Service: google');
+  const result = container.querySelector('[aria-label="Translation result"]')!;
+  const title = Array.from(result.querySelectorAll('span')).find((span) => span.textContent === 'Translation result');
+  expect(title?.nextElementSibling?.textContent).toBe('Service: google');
   expect(mocks.translate).toHaveBeenCalledTimes(1);
 });
 

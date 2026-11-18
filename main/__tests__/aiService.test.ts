@@ -2,18 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { configGet } = vi.hoisted(() => ({ configGet: vi.fn() }));
 vi.mock("@/main/storage/configStore", () => ({ configRepo: { get: configGet } }));
-vi.mock("@/main/messageBridge", () => ({
-    ABORT_SCOPE: { AI_COMPLETE: "aiComplete" },
-    handleAbort: vi.fn(),
-    handleAbortable: vi.fn(),
-    handleAsync: vi.fn((_label, sendResponse, work) => {
-        work().then(sendResponse);
-        return true;
-    }),
-}));
-
 import { AiProvider, normalizeProvider } from "@/main/aiProvider";
-import { ACTION, AI_TASK, CONFIG_KEY } from "@/main/constants";
+import { ACTION, AI_TASK, CONFIG_KEY, STATUS_FAIL, STATUS_SUCCESS } from "@/main/constants";
 import { AI_MAX_INPUT_CHARS, OPENCODE_SESSION_HEADER, aiMessageHandlers, aiPageTranslate, buildPrompt, chatCompleteNonStream, chatStream } from "@/main/aiService";
 
 const provider = new AiProvider("mt", "bailian", "Alibaba Cloud Model Studio", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "test-key", "qwen-mt-plus");
@@ -32,8 +22,13 @@ async function collect(stream: AsyncGenerator<string, void, void>) {
     return chunks;
 }
 
+async function runAiAction(action: ACTION, data: unknown) {
+    return new Promise<any>(resolve => aiMessageHandlers[action]({ data }, resolve));
+}
+
 beforeEach(() => {
     vi.clearAllMocks();
+    fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
     configGet.mockImplementation(async (key) => key === CONFIG_KEY.AI_PROVIDERS ? [provider] : provider.id);
 });
@@ -88,14 +83,14 @@ describe("Qwen-MT compatibility", () => {
     });
 
     it("tests provider connectivity with a valid translation request", async () => {
-        fetchMock.mockResolvedValue(streamResponse(["ping"]));
-        const reply = await new Promise((resolve) => {
-            aiMessageHandlers[ACTION.AI_PROVIDER_TEST]({ data: provider }, resolve);
+        fetchMock.mockResolvedValue(completeResponse("你好"));
+        expect(await runAiAction(ACTION.AI_PROVIDER_TEST, provider)).toEqual({
+            status: STATUS_SUCCESS, data: { reply: "你好" },
         });
-        expect(reply).toEqual({ reply: "ping" });
         expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
-            messages: [{ role: "user", content: "ping" }],
-            translation_options: { source_lang: "auto", target_lang: "English" },
+            stream: false,
+            messages: [{ role: "user", content: "Hello" }],
+            translation_options: { source_lang: "auto", target_lang: "Chinese" },
         });
     });
 
@@ -167,6 +162,67 @@ describe("Qwen-MT compatibility", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+});
+
+describe("OpenAI Chat Completions parameters", () => {
+    const official = new AiProvider("openai", "openai", "OpenAI", "https://api.openai.com/v1/chat/completions", "test-key", "reasoning-model");
+
+    it("uses the same non-streaming parameters for the draft test and actual translation", async () => {
+        const draft = normalizeProvider({ ...official, model: "unsaved-model" });
+        fetchMock.mockResolvedValueOnce(completeResponse("  你好  ")).mockResolvedValueOnce(completeResponse("你好"));
+        expect(await runAiAction(ACTION.AI_PROVIDER_TEST, draft)).toEqual({
+            status: STATUS_SUCCESS, data: { reply: "你好" },
+        });
+        expect(configGet).not.toHaveBeenCalled();
+        configGet.mockResolvedValue([official]);
+        expect(await aiPageTranslate(official.id, ["Hello"], "zh-CN")).toEqual(["你好"]);
+
+        const [testBody, pageBody] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
+        expect(testBody.model).toBe("unsaved-model");
+        expect(pageBody.model).toBe(official.model);
+        for (const body of [testBody, pageBody]) {
+            expect(body).toMatchObject({ stream: false, messages: expect.arrayContaining([{ role: "user", content: "Hello" }]) });
+            expect(body).not.toHaveProperty("max_tokens");
+            expect(body).not.toHaveProperty("max_completion_tokens");
+            expect(body).not.toHaveProperty("temperature");
+        }
+    });
+
+    it.each([
+        ["https://api.openai.com/v1/chat/completions", "max_completion_tokens"],
+        ["https://api.openai.com.example.org/v1/chat/completions", "max_tokens"],
+    ])("uses the right token field for %s in both request modes", async (url, tokenKey) => {
+        const target = normalizeProvider({ ...official, url });
+        const opts = { ...options, maxTokens: 512, temperature: 0 };
+        fetchMock.mockResolvedValueOnce(completeResponse("你好")).mockResolvedValueOnce(streamResponse(["你好"]));
+        expect(await chatCompleteNonStream(target, messages, opts)).toBe("你好");
+        expect(await collect(chatStream(target, messages, opts))).toEqual(["你好"]);
+        for (const [index, [, init]] of fetchMock.mock.calls.entries()) {
+            expect(JSON.parse(init.body)).toEqual({
+                model: official.model, messages, stream: index === 1, [tokenKey]: 512,
+                ...(tokenKey === "max_tokens" ? { temperature: 0 } : {}),
+            });
+        }
+    });
+
+    it("leaves token limits and sampling unset in normal streaming writing requests", async () => {
+        fetchMock.mockResolvedValueOnce(streamResponse(["Polished text"]));
+        const writing = buildPrompt({ task: AI_TASK.POLISH, payload: { text: "An example." } });
+        expect(await collect(chatStream(official, writing, { task: AI_TASK.POLISH }))).toEqual(["Polished text"]);
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ model: official.model, messages: writing, stream: true });
+    });
+
+    it("does not report success for a reasoning-only response or retry provider errors", async () => {
+        fetchMock.mockResolvedValueOnce(Response.json({ choices: [{ message: { content: null, reasoning_content: "internal" } }] }));
+        expect(await runAiAction(ACTION.AI_PROVIDER_TEST, official)).toMatchObject({
+            status: STATUS_FAIL, data: { message: "The translation service returned no text." },
+        });
+        fetchMock.mockResolvedValueOnce(new Response("Unsupported parameter", { status: 400 }));
+        expect(await runAiAction(ACTION.AI_PROVIDER_TEST, official)).toMatchObject({
+            status: STATUS_FAIL, data: { message: expect.stringContaining("Unsupported parameter") },
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
 });
 
 describe("OpenCode Go", () => {

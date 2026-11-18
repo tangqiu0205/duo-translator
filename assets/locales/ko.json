@@ -347,6 +347,7 @@
   "aiSave": "구하다",
   "aiProviderType": "유형",
   "aiProviderUrl": "URL",
+  "aiUseUrlTemplate": "URL 템플릿 사용",
   "aiUrlTemplateHint": "{model} 및 {key} 자리 표시자는 자동으로 대체됩니다.",
   "aiApiKeyOptionalHint": "이 공급자 유형에 대해서는 선택 사항입니다.",
   "translateServiceTest": "시험",

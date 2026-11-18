@@ -413,6 +413,7 @@
   "aiSave": "儲存",
   "aiProviderType": "型別",
   "aiProviderUrl": "URL",
+  "aiUseUrlTemplate": "填入範本網址",
   "aiUrlTemplateHint": "佔位符 {model} 和 {key} 會自動替換。",
   "aiApiKeyOptionalHint": "此型別可不填。",
   "translateServiceTest": "測試",

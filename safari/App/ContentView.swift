@@ -12,9 +12,9 @@ import SwiftUI
 
 /// Public links. Keep in sync with VITE_WEBSITE / VITE_GITHUB_URL in .env.
 private enum Links {
-    static let website = URL(string: "https://github.com/tangqiu0205/duo-translator")!
-    static let privacy = URL(string: "https://github.com/tangqiu0205/duo-translator#privacy")!
-    static let github = URL(string: "https://github.com/tangqiu0205/duo-translator")!
+    static let website = URL(string: "https://github.com/tangqiu0205/fluento")!
+    static let privacy = URL(string: "https://github.com/tangqiu0205/fluento#privacy")!
+    static let github = URL(string: "https://github.com/tangqiu0205/fluento")!
 }
 
 struct ContentView: View {

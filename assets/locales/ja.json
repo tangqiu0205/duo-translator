@@ -347,6 +347,7 @@
   "aiSave": "保存",
   "aiProviderType": "タイプ",
   "aiProviderUrl": "URL",
+  "aiUseUrlTemplate": "URL テンプレートを使用",
   "aiUrlTemplateHint": "プレースホルダー{model}と{key}は自動的に置換されます。",
   "aiApiKeyOptionalHint": "このプロバイダータイプではオプションです。",
   "translateServiceTest": "テスト",

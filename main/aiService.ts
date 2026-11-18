@@ -154,28 +154,35 @@ function openAiHeaders(provider: AiProvider): Record<string, string> {
     return headers;
 }
 
+function requestOpenAiChat(provider: AiProvider, messages: ChatMessage[], opts: ChatOptions, stream: boolean) {
+    const url = applyTemplate(provider.url, { model: provider.model, key: provider.apiKey });
+    const endpoint = new URL(url);
+    // An OpenAI preset can be pointed at a third-party gateway. Apply the
+    // official API rules by destination, not by preset or model name.
+    const official = endpoint.protocol === "https:" && endpoint.hostname === "api.openai.com";
+    const body = {
+        model: provider.model,
+        messages,
+        stream,
+        ...(!official && opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        ...(opts.maxTokens !== undefined ? { [official ? "max_completion_tokens" : "max_tokens"]: opts.maxTokens } : {}),
+        ...opts.params,
+    };
+    return fetch(url, {
+        method: "POST",
+        headers: openAiHeaders(provider),
+        body: JSON.stringify(body),
+        signal: opts.signal,
+        ...(opts.credentials ? { credentials: opts.credentials, redirect: 'error' as const } : {}),
+    });
+}
+
 export async function* openAiChatStream(
     provider: AiProvider,
     messages: ChatMessage[],
     opts: ChatOptions = {},
 ): AsyncGenerator<string, void, void> {
-    const url = applyTemplate(provider.url, { model: provider.model, key: provider.apiKey });
-    const headers = openAiHeaders(provider);
-
-    const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-            model: provider.model,
-            messages,
-            stream: true,
-            ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-            ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-            ...(opts.params !== undefined ? opts.params : {})
-        }),
-        signal: opts.signal,
-        ...(opts.credentials ? { credentials: opts.credentials, redirect: 'error' as const } : {}),
-    });
+    const resp = await requestOpenAiChat(provider, messages, opts, true);
 
     if (!resp.ok || !resp.body) {
         const errText = await resp.text().catch(() => "");
@@ -355,23 +362,7 @@ export async function openAiChatComplete(
     messages: ChatMessage[],
     opts: ChatOptions = {},
 ): Promise<string> {
-    const url = applyTemplate(provider.url, { model: provider.model, key: provider.apiKey });
-    const headers = openAiHeaders(provider);
-
-    const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-            model: provider.model,
-            messages,
-            stream: false,
-            ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-            ...(opts.params !== undefined ? opts.params : {}),
-            ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-        }),
-        signal: opts.signal,
-        ...(opts.credentials ? { credentials: opts.credentials, redirect: 'error' as const } : {}),
-    });
+    const resp = await requestOpenAiChat(provider, messages, opts, false);
 
     if (!resp.ok) {
         const errText = await resp.text().catch(() => "");
@@ -526,6 +517,16 @@ export function providerTaskParams(provider: AiProvider): any {
     return undefined;
 }
 
+function completeAiTask(provider: AiProvider, task: AI_TASK, payload: AiStreamRequest["payload"], signal?: AbortSignal) {
+    return chatCompleteNonStream(provider, buildPrompt({ task, providerId: provider.id, payload }), {
+        temperature: 0,
+        signal,
+        params: providerTaskParams(provider),
+        task,
+        targetLang: payload.targetLang,
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Page translation
 // ---------------------------------------------------------------------------
@@ -549,9 +550,6 @@ export async function aiPageTranslate(
 ): Promise<string[]> {
     const provider = await resolveAiProviderOrThrow(providerId);
     const qwenMt = getAiProtocol(provider) === "qwen-mt";
-
-    let temperature = 0; // todo support use defined temperature
-    const params = providerTaskParams(provider); // todo support use defined params
 
     const all = texts ?? [];
     if (all.length === 0) return [];
@@ -594,18 +592,9 @@ export async function aiPageTranslate(
         const safeTexts = batch.texts.map((t) =>
             t.includes(SEPARATOR_TAG) ? t.split(SEPARATOR_TAG).join("<sep\\/>") : t,
         );
-        const messages = buildPrompt({
-            task: AI_TASK.PAGE_TRANSLATE,
-            providerId: provider.id,
-            payload: { text: safeTexts.join(SEPARATOR_TAG), targetLang },
-        });
-        // Non-streaming: the upstream request is sent with stream:false (see
-        // chatCompleteNonStream) — page translation wants the full result in
-        // one response, not an SSE stream.
-        const full = await chatCompleteNonStream(provider, messages, {
-            temperature, signal, params,
-            ...(qwenMt ? { task: AI_TASK.PAGE_TRANSLATE, targetLang } : {}),
-        });
+        const full = await completeAiTask(provider, AI_TASK.PAGE_TRANSLATE, {
+            text: safeTexts.join(SEPARATOR_TAG), targetLang,
+        }, signal);
         // Split on the separator but KEEP interior empties. Filtering every
         // empty (the old behavior) shifted all translations after an empty one
         // up by a position — one dropped segment mis-translated the rest of
@@ -667,20 +656,17 @@ export const aiMessageHandlers: Record<string, MessageHandler> = {
         // possibly disabled — so it is used as-is rather than resolved by id.
         const provider = normalizeProvider(message.data);
         return handleAsync('AI provider test', sendResponse, async () => {
-            const gen = chatStream(
-                provider,
-                [
-                    { role: "system", content: "Reply with exactly: ok" },
-                    { role: "user", content: "ping" },
-                ],
-                { maxTokens: 16, task: AI_TASK.TRANSLATE, targetLang: "en" },
-            );
-            let collected = "";
-            for await (const delta of gen) {
-                collected += delta;
-                if (collected.length > 32) break;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(new Error("AI provider test timed out")), 30_000);
+            try {
+                const reply = (await completeAiTask(provider, AI_TASK.TRANSLATE, {
+                    text: "Hello", targetLang: "zh-CN",
+                }, controller.signal)).trim();
+                if (!reply) throw new Error("The translation service returned no text.");
+                return { reply };
+            } finally {
+                clearTimeout(timeout);
             }
-            return { reply: collected.trim() };
         });
     },
 
@@ -693,14 +679,7 @@ export const aiMessageHandlers: Record<string, MessageHandler> = {
                 payload: { text: string; targetLang?: string; systemPrompt?: string; lang?: string };
             };
             const provider = await resolveAiProviderOrThrow(providerId);
-            const messages = buildPrompt({ task, providerId: provider.id, payload });
-            const text = await chatCompleteNonStream(provider, messages, {
-                temperature: 0,
-                signal,
-                params: providerTaskParams(provider),
-                task,
-                targetLang: payload.targetLang,
-            });
+            const text = await completeAiTask(provider, task, payload, signal);
             return { text };
         },
     ),

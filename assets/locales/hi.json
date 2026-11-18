@@ -347,6 +347,7 @@
   "aiSave": "बचाना",
   "aiProviderType": "प्रकार",
   "aiProviderUrl": "यूआरएल",
+  "aiUseUrlTemplate": "URL टेम्पलेट इस्तेमाल करें",
   "aiUrlTemplateHint": "प्लेसहोल्डर {model} और {key} स्वतः प्रतिस्थापित हो जाते हैं।",
   "aiApiKeyOptionalHint": "इस प्रकार के प्रदाता के लिए यह वैकल्पिक है।",
   "translateServiceTest": "परीक्षा",

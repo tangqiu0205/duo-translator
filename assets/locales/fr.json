@@ -347,6 +347,7 @@
   "aiSave": "Sauvegarder",
   "aiProviderType": "Taper",
   "aiProviderUrl": "URL",
+  "aiUseUrlTemplate": "Utiliser le modèle d’URL",
   "aiUrlTemplateHint": "Les espaces réservés {model} et {key} sont automatiquement remplacés.",
   "aiApiKeyOptionalHint": "Optionnel pour ce type de fournisseur.",
   "translateServiceTest": "Test",

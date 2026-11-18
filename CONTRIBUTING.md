@@ -4,7 +4,7 @@ Thank you for your interest in contributing! All kinds of contributions are welc
 
 ## Reporting Bugs
 
-Before opening an issue, please search [existing issues](https://github.com/tangqiu0205/duo-translator/issues) to avoid duplicates.
+Before opening an issue, please search [existing issues](https://github.com/tangqiu0205/fluento/issues) to avoid duplicates.
 
 When reporting a bug, include:
 

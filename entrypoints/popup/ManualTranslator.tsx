@@ -245,13 +245,15 @@ export function ManualTranslator({ services, defaultService, embedded = false, o
       {draft.result && (
         <div className="rounded-[10px] border border-line bg-surface px-3 py-2" aria-label={t('popupTranslationResult', 'Translation result')}>
           <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium text-accent">{t('popupTranslationResult', 'Translation result')}</span>
-            <div className="flex items-center">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-[11px] font-medium text-accent">{t('popupTranslationResult', 'Translation result')}</span>
+              {draft.result.actualService && <span className="min-w-0 break-words text-[10px] text-ink-mute">{t('freeTranslationUsed', 'Service')}: {t(TRANSLATE_SERVICES.get(draft.result.actualService)?.title || draft.result.actualService, draft.result.actualService)}</span>}
+            </div>
+            <div className="flex shrink-0 items-center">
               {actions('result', draft.result.text, draft.result.targetLang)}
               <button type="button" className={toolClass} aria-expanded={expanded} aria-label={t(expanded ? 'popupCollapseResult' : 'popupExpandResult', expanded ? 'Collapse translation' : 'Expand translation')} onClick={() => setExpanded((value) => !value)}>{expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
             </div>
           </div>
-          {draft.result.actualService && <p className="mb-1 text-[10px] text-ink-mute">{t('freeTranslationUsed', 'Service')}: {t(TRANSLATE_SERVICES.get(draft.result.actualService)?.title || draft.result.actualService, draft.result.actualService)}</p>}
           <div role="status" aria-live="polite" tabIndex={0} className={cn('overflow-y-auto whitespace-pre-wrap break-words text-[14px] leading-[1.6] outline-accent', expanded ? 'max-h-64' : 'max-h-36')}>{draft.result.text}</div>
           <div className="mt-2 border-t border-line pt-1.5">
             <div className="flex items-center justify-between">
