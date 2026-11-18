@@ -48,6 +48,21 @@ describe('page translation progress transport', () => {
         expect(mock.client().onMessage.listeners.size).toBe(0);
         expect(mock.client().onDisconnect.listeners.size).toBe(0);
     });
+    it('lets a queued cache write finish after the successful client disconnect', async () => {
+        let releaseWrite!: () => void;
+        const writeGate = new Promise<void>(resolve => { releaseWrite = resolve; });
+        const persist = vi.fn();
+        let write!: Promise<void>;
+        registerTranslationProgress(async (_request, signal) => {
+            write = writeGate.then(() => { if (!signal.aborted) persist(); });
+            return [result('第一段'), result('第二段')];
+        });
+        await expect(requestTranslationProgress(request, undefined, 1000, vi.fn())).resolves.toHaveLength(2);
+        expect(mock.client().disconnect).toHaveBeenCalledOnce();
+        releaseWrite();
+        await write;
+        expect(persist).toHaveBeenCalledOnce();
+    });
     it('disconnects and cancels the upstream work on abort', async () => {
         let upstream!: AbortSignal;
         registerTranslationProgress(async (_request, signal) => { upstream = signal; return new Promise(() => {}); });

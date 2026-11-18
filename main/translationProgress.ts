@@ -8,13 +8,14 @@ export type TranslationProgress = (index: number, result: TranslateResult) => vo
 interface Request { service: string; texts: string[]; targetLang: string; sourceLang?: string; scene?: 'subtitle' }
 type Runner = (request: Request, signal: AbortSignal, progress: TranslationProgress) => Promise<TranslateResult[] | undefined>;
 
-/** Each port belongs to one caller/frame and one batch; disconnect cancels it. */
+/** Each port belongs to one caller/frame and one batch; an early disconnect cancels it. */
 export function registerTranslationProgress(run: Runner): void {
     browser.runtime.onConnect.addListener(port => {
         if (port.name !== PORT) return;
         const controller = new AbortController();
         let started = false;
-        port.onDisconnect.addListener(() => controller.abort());
+        const cancelOnDisconnect = () => controller.abort();
+        port.onDisconnect.addListener(cancelOnDisconnect);
         const post = (message: unknown) => {
             if (controller.signal.aborted) return;
             try { port.postMessage(message); } catch { controller.abort(); }
@@ -28,7 +29,12 @@ export function registerTranslationProgress(run: Runner): void {
                 return;
             }
             void run(request, controller.signal, (index, result) => post({ type: 'result', index, result }))
-                .then(results => post({ type: 'done', results }))
+                .then(results => {
+                    // The client closes the port on `done`. That's not a
+                    // cancellation: successful cache writes may still be queued.
+                    port.onDisconnect.removeListener(cancelOnDisconnect);
+                    post({ type: 'done', results });
+                })
                 .catch(error => post({ type: 'error', error: {
                     message: error?.message || String(error), name: error?.name,
                     stack: error?.stack, detail: error?.detail, scope: 'Translate texts',
