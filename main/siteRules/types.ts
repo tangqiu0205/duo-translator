@@ -59,6 +59,8 @@ export type SiteRule = {
     matchSelectors: string[];
     /** CSS selectors delimiting the ONLY regions to translate. Empty = whole page. */
     includeSelectors: string[];
+    /** Optional roots used only in main-content mode. */
+    mainContentSelectors?: string[];
     /** CSS selectors for regions never to translate. */
     excludeSelectors: string[];
     /** CSS injected into the page while it is translated. */
@@ -107,6 +109,7 @@ export type CandidateRule = {
     key: string;
     matchSelectors: string[];
     includeSelectors: string[];
+    mainContentSelectors?: string[];
     excludeSelectors: string[];
     injectCss: string[];
 };
@@ -130,6 +133,7 @@ export const EMPTY_CANDIDATES: SiteRuleCandidates = { tiers: [] };
 export type ResolvedSiteRules = {
     /** Merged include selectors. Empty = no restriction, translate the whole page. */
     includeSelectors: string[];
+    mainContentSelectors?: string[];
     /** Merged exclude selectors. */
     excludeSelectors: string[];
     /** Concatenated `injectCss`, system → subscription → user (later wins). */
@@ -159,6 +163,7 @@ export const EMPTY_RESOLVED: ResolvedSiteRules = {
 export type CompiledSiteRules = {
     /** Joined include selectors, or '' when unrestricted. */
     includeSelector: string;
+    mainContentSelector?: string;
     /** Joined exclude selectors, or ''. */
     excludeSelector: string;
     injectCss: string;

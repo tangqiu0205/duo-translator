@@ -259,6 +259,7 @@ export enum TRANSLATE_ACTION {
     TRANSLATE = 'translate',
     TOGGLE = 'toggleTranslate',
     SHOW_ORIGINAL = 'showOriginal',
+    TRANSLATE_FULL_PAGE_ONCE = 'translateFullPageOnce',
     TRANSLATE_STATUS_CHANGED = "translateStatusChanged",
     TRANSLATE_INPUT_BOX = 'translateInputBox',
     TRANSLATE_PARA = 'translatePara',
@@ -395,6 +396,7 @@ export enum ACTION {
 export enum CONFIG_KEY {
     DEFAULT_STRATEGY = 'defaultStrategy',
     VIEW_STRATEGY = 'viewStrategy',
+    PAGE_TRANSLATION_SCOPE = 'pageTranslationScope',
     TARGET_LANGUAGE = 'targetLanguage',
     SOURCE_LANGUAGE = 'sourceLanguage',
     // Languages the user never wants translated, as a list of LANGUAGES values.
@@ -747,6 +749,7 @@ export const DEFAULT_VALUE = {
     ERROR_TOAST_SWITCH: true,
     CONTEXT_MENU_SWITCH: true,
     VIEW_STRATEGY: 'double',
+    PAGE_TRANSLATION_SCOPE: 'all',
     DEFAULT_STRATEGY: DEFAULT_STRATEGY.NEVER,
     AI_WRITING_SWITCH: true,
     AI_DEFAULT_ENHANCE_MODE: 'polish',

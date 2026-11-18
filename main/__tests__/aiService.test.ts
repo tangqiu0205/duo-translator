@@ -4,7 +4,7 @@ const { configGet } = vi.hoisted(() => ({ configGet: vi.fn() }));
 vi.mock("@/main/storage/configStore", () => ({ configRepo: { get: configGet } }));
 import { AiProvider, normalizeProvider } from "@/main/aiProvider";
 import { ACTION, AI_TASK, CONFIG_KEY, STATUS_FAIL, STATUS_SUCCESS } from "@/main/constants";
-import { AI_MAX_INPUT_CHARS, OPENCODE_SESSION_HEADER, aiMessageHandlers, aiPageTranslate, buildPrompt, chatCompleteNonStream, chatStream } from "@/main/aiService";
+import { AI_MAX_INPUT_CHARS, OPENCODE_SESSION_HEADER, aiMessageHandlers, aiPageTranslate, aiPageTranslateWithProvider, buildPrompt, chatCompleteNonStream, chatStream } from "@/main/aiService";
 
 const provider = new AiProvider("mt", "bailian", "Alibaba Cloud Model Studio", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "test-key", "qwen-mt-plus");
 const fetchMock = vi.fn();
@@ -141,6 +141,17 @@ describe("Qwen-MT compatibility", () => {
         const body = JSON.parse(fetchMock.mock.calls[0][1].body);
         expect(body.messages[0].role).toBe("system");
         expect(body.messages[1].content).toBe("Hello<sep/>Goodbye");
+    });
+
+    it("keeps an empty AI slot aligned and excludes its source fallback from cache", async () => {
+        const general = normalizeProvider({ ...provider, model: "qwen-plus" });
+        fetchMock.mockResolvedValueOnce(completeResponse("<sep/>Goodbye"));
+        expect(await aiPageTranslateWithProvider(general, ["Hello", "Goodbye"], "zh-CN")).toEqual([
+            { text: "Hello", cacheable: false }, { text: "Goodbye", cacheable: true },
+        ]);
+        fetchMock.mockResolvedValueOnce(completeResponse("one response for two paragraphs"));
+        expect((await aiPageTranslateWithProvider(general, ["Hello", "Goodbye"], "zh-CN"))
+            .every(item => !item.cacheable)).toBe(true);
     });
 
     it("preserves blank paragraphs and falls back on empty translations", async () => {

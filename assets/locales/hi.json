@@ -1,4 +1,10 @@
 {
+  "pageScopeLabel": "अनुवाद का दायरा",
+  "pageScopeAll": "पूरा पृष्ठ",
+  "pageScopeMain": "केवल मुख्य सामग्री",
+  "pageScopeNotFound": "मुख्य सामग्री नहीं मिली।",
+  "pageScopeTranslateFullOnce": "पूरा पृष्ठ अनुवाद करें",
+  "ruleMainContentSelectors": "मुख्य सामग्री के सेलेक्टर",
   "enable": "सक्षम",
   "disable": "अक्षम करना",
   "useTranslationServiceCannotBeDisabled": "वर्तमान अनुवाद सेवा को बंद नहीं किया जा सकता है।",

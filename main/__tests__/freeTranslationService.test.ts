@@ -51,12 +51,43 @@ it('does not publish results from a free-pool attempt that may still fall back',
     expect(results?.[0]).toMatchObject({ actualService: 'google', translatedMappedHtmlText: '备用结果' });
 });
 
+it('preserves order and provenance for mixed cache hits while routing only misses', async () => {
+    pool(['google']);
+    mocks.cacheGet.mockResolvedValue([
+        { t: '缓存一', s: 'en', c: 1, actualService: 'microsoft' },
+        null,
+        { t: '缓存三', s: 'en', c: 1, actualService: 'bilibili' },
+    ]);
+    const google = vi.spyOn(services.googleTranslationService, 'translateText').mockResolvedValue([answer('新译文')]);
+    const progress = vi.fn();
+    const result = await services.translateTextsWithCache('freeAuto', ['one', 'two', 'three'], 'zh-CN', undefined, undefined, undefined, progress);
+    expect(google).toHaveBeenCalledWith(['two'], 'zh-CN', expect.any(AbortSignal), undefined, undefined);
+    expect(result?.map(({ translatedMappedHtmlText, actualService }) => [translatedMappedHtmlText, actualService])).toEqual([
+        ['缓存一', 'microsoft'], ['新译文', 'google'], ['缓存三', 'bilibili'],
+    ]);
+    expect(progress.mock.calls.map(([index]) => index)).toEqual([0, 2]);
+});
+
+it('does not write a result from an automatic request cancelled during the attempt', async () => {
+    pool(['google']);
+    const controller = new AbortController();
+    vi.spyOn(services.googleTranslationService, 'translateText').mockImplementation(async () => {
+        controller.abort();
+        return [answer()];
+    });
+    const progress = vi.fn();
+    await expect(services.translateTextsWithCache('freeAuto', ['hello'], 'zh-CN', controller.signal, undefined, undefined, progress))
+        .rejects.toMatchObject({ name: 'AbortError' });
+    expect(mocks.cachePut).not.toHaveBeenCalled();
+    expect(progress).not.toHaveBeenCalled();
+});
+
 it('registers the aggregate and pins it first in the shared display list', async () => {
     const { TRANSLATE_SERVICES } = await import('@/main/constants');
     expect(services.resolveTranslateService('freeAuto')).toBeInstanceOf(services.FreeTranslateService);
     expect([...TRANSLATE_SERVICES.keys()][0]).toBe('freeAuto');
 });
-it.each(['transmart', 'volcengine', 'lara', 'modernMt'] as const)('registers %s independently and uses its concrete cache namespace when opted into the pool', async (id) => {
+it.each(['transmart', 'volcengine', 'lara', 'modernMt'] as const)('registers %s independently and uses the aggregate cache namespace when opted into the pool', async (id) => {
     pool([id]);
     const { WebTranslator } = await import('@/main/webTranslator');
     const translate = vi.spyOn(WebTranslator.prototype, 'translate').mockResolvedValue([{ text: '甲 &amp; 乙', sourceLang: 'en' }]);
@@ -64,18 +95,21 @@ it.each(['transmart', 'volcengine', 'lara', 'modernMt'] as const)('registers %s 
     const result = await services.translateTextsWithCache('freeAuto', ['A &amp; B'], 'zh-CN', undefined, 'en', 'subtitle');
     expect(result?.[0]).toMatchObject({ translatedMappedHtmlText: '甲 &amp; 乙', actualService: id });
     expect(translate).toHaveBeenCalledWith(['A &amp; B'], 'zh-CN', expect.any(AbortSignal), 'en', undefined);
-    expect(mocks.cacheGet).toHaveBeenCalledWith(`${id}:from:en`, 'zh-CN', ['A &amp; B']);
-    expect(mocks.cachePut).toHaveBeenCalledWith(`${id}:from:en`, 'zh-CN', expect.any(Array));
+    expect(mocks.cacheGet).toHaveBeenCalledWith('freeAuto:v1:subtitle:from:en', 'zh-CN', ['A &amp; B']);
+    expect(mocks.cachePut).toHaveBeenCalledWith('freeAuto:v1:subtitle:from:en', 'zh-CN', expect.any(Array), { keepExisting: true });
 });
-it('sends a full batch to one selected provider and never caches by aggregate id', async () => {
+it('sends uncached items to one provider and never writes to its manual cache', async () => {
     const ms = vi.spyOn(services.microsoftTranslationService, 'translateText').mockResolvedValue([answer('第一段'), answer('第二段')]);
     const google = vi.spyOn(services.googleTranslationService, 'translateText').mockResolvedValue([answer('wrong')]);
     const result = await services.translateTextsWithCache('freeAuto', ['one', 'two'], 'zh-CN');
     expect(result?.map((item) => item.actualService)).toEqual(['microsoft', 'microsoft']);
     expect(ms).toHaveBeenCalledTimes(1);
     expect(google).not.toHaveBeenCalled();
-    expect(mocks.cacheGet).toHaveBeenCalledWith('microsoft', 'zh-CN', ['one', 'two']);
-    expect(mocks.cachePut.mock.calls.every(([id]) => id !== 'freeAuto')).toBe(true);
+    expect(mocks.cacheGet.mock.calls).toEqual([['freeAuto:v1:text', 'zh-CN', ['one', 'two']]]);
+    expect(mocks.cachePut.mock.calls).toEqual([['freeAuto:v1:text', 'zh-CN', [
+        { text: 'one', value: { t: '第一段', s: 'en', c: 1, actualService: 'microsoft' } },
+        { text: 'two', value: { t: '第二段', s: 'en', c: 1, actualService: 'microsoft' } },
+    ], { keepExisting: true }]]);
 });
 it('switches the entire batch on failure, retaining source, scene and escaped inline markup', async () => {
     pool(['microsoft', 'google']);
@@ -84,7 +118,7 @@ it('switches the entire batch on failure, retaining source, scene and escaped in
     const result = await services.translateTextsWithCache('freeAuto', ['<b0>A &amp; B</b0>'], 'zh-CN', undefined, 'en', 'subtitle');
     expect(result?.[0]).toMatchObject({ translatedMappedHtmlText: '<b0>甲 &amp; 乙</b0>', actualService: 'google' });
     expect(google).toHaveBeenCalledWith(['<b0>A &amp; B</b0>'], 'zh-CN', expect.any(AbortSignal), 'en', { scene: 'subtitle' });
-    expect(mocks.cacheGet).toHaveBeenCalledWith('google:from:en', 'zh-CN', ['<b0>A &amp; B</b0>']);
+    expect(mocks.cacheGet).toHaveBeenCalledWith('freeAuto:v1:subtitle:from:en', 'zh-CN', ['<b0>A &amp; B</b0>']);
 });
 it('repairs dropped native HTML markers and escapes arbitrary returned tags', async () => {
     pool(['google']);
@@ -95,16 +129,17 @@ it('repairs dropped native HTML markers and escapes arbitrary returned tags', as
     expect(google).toHaveBeenCalledTimes(2);
     expect(result?.[0].translatedMappedHtmlText).toBe('&lt;script&gt;unsafe&lt;/script&gt; <b0>世界</b0>');
 });
-it('reports the actual route on concrete-provider cache hits without network calls', async () => {
-    pool(['google']);
-    mocks.cacheGet.mockResolvedValue([{ t: '你好', s: 'en', c: 1 }]);
+it('serves historical results without consulting route settings or contacting a provider', async () => {
+    pool(['microsoft']);
+    mocks.cacheGet.mockResolvedValue([{ t: '你好', s: 'en', c: 1, actualService: 'google' }]);
     const google = vi.spyOn(services.googleTranslationService, 'translateText');
     const result = await services.translateTextsWithCache('freeAuto', ['hello'], 'zh-CN');
     expect(result?.[0]).toMatchObject({ translatedMappedHtmlText: '你好', actualService: 'google' });
     expect(google).not.toHaveBeenCalled();
-    expect(mocks.cacheGet).toHaveBeenCalledWith('google', 'zh-CN', ['hello']);
+    expect(mocks.cacheGet).toHaveBeenCalledWith('freeAuto:v1:text', 'zh-CN', ['hello']);
+    expect(mocks.get.mock.calls).toEqual([[CONFIG_KEY.TRANSLATION_CACHE_SWITCH]]);
 });
-it('preserves Bilibili model-specific caches inside the pool', async () => {
+it('uses one shared cache key for Bilibili models inside the pool', async () => {
     pool(['bilibili']);
     const { BilibiliTranslator } = await import('@/main/bilibiliTranslator');
     vi.spyOn(BilibiliTranslator.prototype, 'translate').mockResolvedValue([{ text: '你好', sourceLang: 'en' }]);
@@ -113,8 +148,7 @@ it('preserves Bilibili model-specific caches inside the pool', async () => {
     config[CONFIG_KEY.BILIBILI_TRANSLATE_MODEL] = 'index-mt-2b';
     await services.translateTextsWithCache('freeAuto', ['hello'], 'zh-CN');
     expect(first?.[0].actualService).toBe('bilibili');
-    expect(mocks.cacheGet).toHaveBeenCalledWith('bilibili:index-mt-9b', 'zh-CN', ['hello']);
-    expect(mocks.cacheGet).toHaveBeenCalledWith('bilibili:index-mt-2b', 'zh-CN', ['hello']);
+    expect(mocks.cacheGet.mock.calls.map(([namespace]) => namespace)).toEqual(['freeAuto:v1:text', 'freeAuto:v1:text']);
 });
 it('excludes globally disabled services even when selected in the pool', async () => {
     pool(['microsoft', 'google']);
@@ -127,7 +161,8 @@ it('excludes globally disabled services even when selected in the pool', async (
 it('rejects a pool whose services are all globally disabled without requesting a provider', async () => {
     pool(['google']); config[CONFIG_KEY.DISABLED_TRANSLATE_SERVICES] = ['google'];
     await expect(services.translateTextsWithCache('freeAuto', ['hello'], 'zh-CN')).rejects.toThrow('No eligible');
-    expect(mocks.cacheGet).not.toHaveBeenCalled();
+    expect(mocks.cacheGet).toHaveBeenCalledOnce();
+    expect(mocks.cachePut).not.toHaveBeenCalled();
 });
 it('skips login-backed routes for explicit source languages and unsupported article targets', async () => {
     pool(['doubao', 'google']);
@@ -138,13 +173,13 @@ it('skips login-backed routes for explicit source languages and unsupported arti
     await services.translateTextsWithCache('freeAuto', ['hello'], 'uk');
     expect(doubao).not.toHaveBeenCalled();
 });
-it('forwards subtitle scene to opted-in Doubao and uses its subtitle cache namespace', async () => {
+it('forwards subtitle scene to opted-in Doubao and uses the aggregate subtitle namespace', async () => {
     pool(['doubaoVolc']);
     const { DoubaoTranslator } = await import('@/main/doubaoTranslator');
     const doubao = vi.spyOn(DoubaoTranslator.prototype, 'translate').mockResolvedValue([{ text: '字幕', sourceLang: '' }]);
     const result = await services.translateTextsWithCache('freeAuto', ['caption'], 'uk', undefined, undefined, 'subtitle');
     expect(doubao).toHaveBeenCalledWith(['caption'], 'uk', expect.any(AbortSignal), undefined, 'subtitle', undefined);
-    expect(mocks.cacheGet).toHaveBeenCalledWith('doubaoVolc:subtitle', 'uk', ['caption']);
+    expect(mocks.cacheGet).toHaveBeenCalledWith('freeAuto:v1:subtitle', 'uk', ['caption']);
     expect(result?.[0].actualService).toBe('doubaoVolc');
 });
 it('bypasses Microsoft rather than accepting its per-item truncation', async () => {

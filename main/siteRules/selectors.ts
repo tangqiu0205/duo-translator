@@ -68,6 +68,7 @@ export function compileSiteRules(resolved: ResolvedSiteRules | undefined): Compi
     if (!resolved) return EMPTY_COMPILED;
     return {
         includeSelector: compileSelectorList(resolved.includeSelectors, 'include'),
+        ...(resolved.mainContentSelectors?.length ? { mainContentSelector: compileSelectorList(resolved.mainContentSelectors, 'main content') } : {}),
         excludeSelector: compileSelectorList(resolved.excludeSelectors, 'exclude'),
         injectCss: resolved.injectCss ?? '',
         matchedIds: resolved.matchedIds ?? [],

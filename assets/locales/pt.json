@@ -1,4 +1,10 @@
 {
+  "pageScopeLabel": "Escopo da tradução",
+  "pageScopeAll": "Página inteira",
+  "pageScopeMain": "Apenas conteúdo principal",
+  "pageScopeNotFound": "Conteúdo principal não encontrado.",
+  "pageScopeTranslateFullOnce": "Traduzir página inteira",
+  "ruleMainContentSelectors": "Seletores de conteúdo principal",
   "enable": "Habilitar",
   "disable": "Desativar",
   "useTranslationServiceCannotBeDisabled": "O serviço de tradução em uso não pode ser desativado.",

@@ -119,6 +119,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
   const [clearCacheOpen, setClearCacheOpen] = useState(false);
   const [cacheSizeBytes, setCacheSizeBytes] = useState(0);
   const [viewStrategy, setViewStrategy] = useState<string>(DEFAULT_VALUE.VIEW_STRATEGY);
+  const [pageScope, setPageScope] = useState<'all' | 'main'>(DEFAULT_VALUE.PAGE_TRANSLATION_SCOPE);
   const [targetLang, setTargetLang] = useState<string>(browserTargetLanguage());
   const [translateService, setTranslateService] = useState<string>();
   const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([]);
@@ -196,7 +197,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
     let cancelled = false;
     (async () => {
       const [
-        bh, fb, fbs, ta, vs, tl, ts, ds, ms, lb, tc, et, ntl, minTextLength,
+        bh, fb, fbs, ta, vs, savedScope, tl, ts, ds, ms, lb, tc, et, ntl, minTextLength,
         styleCfg, bgCfg, bgIdxCfg, fcCfg, fcIdxCfg, bcCfg, bcIdxCfg, qbcCfg, qbcIdxCfg,
         hbCfg, hbIdxCfg, hfCfg, hfIdxCfg, hsCfg, hbcCfg, hbcIdxCfg,
       ] = await Promise.all([
@@ -205,6 +206,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
         getConfig(CONFIG_KEY.FLOAT_BALL_STYLE),
         getConfig(CONFIG_KEY.TRANSLATING_ANIMATION),
         getConfig(CONFIG_KEY.VIEW_STRATEGY),
+        getConfig(CONFIG_KEY.PAGE_TRANSLATION_SCOPE),
         getConfig(CONFIG_KEY.TARGET_LANGUAGE),
         getConfig(CONFIG_KEY.TRANSLATE_SERVICE),
         getConfig(CONFIG_KEY.DEFAULT_STRATEGY),
@@ -259,6 +261,7 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
       setErrorToast(et === undefined ? Boolean(DEFAULT_VALUE.ERROR_TOAST_SWITCH) : et);
       setNoTranslateLanguages(Array.isArray(ntl) ? ntl.filter((l): l is string => typeof l === 'string') : []);
       setViewStrategy(vs === undefined ? DEFAULT_VALUE.VIEW_STRATEGY : vs);
+      setPageScope(savedScope === 'main' ? 'main' : 'all');
       tl && setTargetLang(tl);
       // Same flat list (translators + AI providers) and active-service
       // resolution the popup uses, so Options stays consistent with it.
@@ -427,6 +430,13 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
     setViewStrategy(v);
     void setConfig(CONFIG_KEY.VIEW_STRATEGY, v);
     void sendMessageToAllTabs({ action: ACTION.CONFIG_CHANGED, data: { [CONFIG_KEY.VIEW_STRATEGY]: v } });
+  };
+
+  const onPageScopeChange = (value: string) => {
+    if (value !== 'all' && value !== 'main') return;
+    setPageScope(value);
+    void setConfig(CONFIG_KEY.PAGE_TRANSLATION_SCOPE, value);
+    void sendMessageToAllTabs({ action: ACTION.CONFIG_CHANGED, data: { [CONFIG_KEY.PAGE_TRANSLATION_SCOPE]: value } }, false);
   };
 
   const onTargetLang = (v: string) => {
@@ -747,6 +757,20 @@ export function TranslationPage({ onOpenSiteRules }: TranslationPageProps) {
                     {t(item.title, item.title)}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          }
+        />
+        <SettingRow
+          label={t('pageScopeLabel', 'Translation scope')}
+          control={
+            <Select value={pageScope} onValueChange={onPageScopeChange}>
+              <SelectTrigger className="min-w-[200px]" aria-label={t('pageScopeLabel', 'Translation scope')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('pageScopeAll', 'Full page')}</SelectItem>
+                <SelectItem value="main">{t('pageScopeMain', 'Main content only')}</SelectItem>
               </SelectContent>
             </Select>
           }

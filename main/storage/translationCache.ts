@@ -6,12 +6,8 @@
 // extension origin (shared across every tab, never colliding with the host
 // page's own databases the way a content-script IndexedDB would).
 //
-// Cache identity is (service, targetLang, sourceText) — `service` is the same
-// identifier the translate pipeline uses, i.e. a built-in name
-// ('microsoft'|'google'|'deepl') or an AI provider id ('ai:<providerId>'), so
-// AI translations are cached per provider. The stored value keeps the
-// translated mapped-HTML plus the detected sourceLang/score, so a cache hit
-// reconstructs a TranslateResult identical to a fresh API response.
+// The caller chooses the namespace (concrete service, resolved AI request,
+// or the free pool). Language and the source hash complete the key.
 
 import { APP_NAME_KEBAB_CASE } from "../constants";
 
@@ -28,6 +24,7 @@ export interface CachedTranslation {
     t: string; // translatedMappedHtmlText (with <bN> placeholders)
     s: string; // detected sourceLang
     c: number; // score
+    actualService?: string;
 }
 
 interface CacheRecord extends CachedTranslation {
@@ -65,10 +62,10 @@ function cacheKey(service: string, targetLang: string, text: string): string {
     return `${service}${targetLang}${text.length}${cyrb53(text)}`;
 }
 
-function approxSize(rec: { key: string; t: string; s: string }): number {
+function approxSize(rec: Pick<CacheRecord, 'key' | 't' | 's' | 'actualService'>): number {
     // UTF-16 ~2 bytes/char + fixed per-record overhead. Only used to enforce
     // the cap, so a rough estimate is fine.
-    return (rec.key.length + rec.t.length + rec.s.length) * 2 + 64;
+    return (rec.key.length + rec.t.length + rec.s.length + (rec.actualService?.length ?? 0)) * 2 + 64;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +149,7 @@ export async function getMany(
         req.onsuccess = () => {
             const rec = req.result as CacheRecord | undefined;
             if (!rec) return;
-            out[i] = { t: rec.t, s: rec.s, c: rec.c };
+            out[i] = { t: rec.t, s: rec.s, c: rec.c, ...(rec.actualService ? { actualService: rec.actualService } : {}) };
             rec.lastAccess = now;
             store.put(rec); // touch for LRU
         };
@@ -166,24 +163,44 @@ export async function getMany(
  * Batch-store freshly fetched translations. Updates the running size total and
  * triggers LRU eviction when the cap is exceeded.
  */
-export async function putMany(
+let mutationTail: Promise<unknown> = Promise.resolve();
+
+function serializeMutation<T>(run: () => Promise<T>): Promise<T> {
+    const task = mutationTail.then(run);
+    mutationTail = task.catch(() => {});
+    return task;
+}
+
+export function putMany(
     service: string,
     targetLang: string,
     entries: { text: string; value: CachedTranslation }[],
+    options?: { keepExisting?: boolean; signal?: AbortSignal },
 ): Promise<void> {
-    if (entries.length === 0) return;
+    if (entries.length === 0) return Promise.resolve();
+    return serializeMutation(() => writeEntries(service, targetLang, entries, options));
+}
+
+async function writeEntries(
+    service: string,
+    targetLang: string,
+    entries: { text: string; value: CachedTranslation }[],
+    { keepExisting, signal }: { keepExisting?: boolean; signal?: AbortSignal } = {},
+): Promise<void> {
+    if (signal?.aborted) return;
     const db = await openDb();
+    if (cachedTotal === null) cachedTotal = await readPersistedTotal();
+    if (signal?.aborted) return;
     const now = Date.now();
 
-    // De-dupe within the batch (keep the last write for a given key).
+    // The free pool keeps the first successful result for each key.
     const records = new Map<string, CacheRecord>();
     for (const e of entries) {
         const key = cacheKey(service, targetLang, e.text);
+        if (keepExisting && records.has(key)) continue;
         const rec: CacheRecord = {
             key,
-            t: e.value.t,
-            s: e.value.s,
-            c: e.value.c,
+            ...e.value,
             size: 0,
             lastAccess: now,
         };
@@ -198,17 +215,22 @@ export async function putMany(
         const getReq = store.get(rec.key);
         getReq.onsuccess = () => {
             const old = getReq.result as CacheRecord | undefined;
+            if (keepExisting && old) return;
             delta += rec.size - (old?.size ?? 0);
             store.put(rec);
         };
-        getReq.onerror = () => {
-            delta += rec.size;
-            store.put(rec);
-        };
     }
-    await txDone(tx);
+    const abort = () => { try { tx.abort(); } catch { /* already committed */ } };
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+        await txDone(tx);
+    } catch (error) {
+        if (signal?.aborted) return;
+        throw error;
+    } finally {
+        signal?.removeEventListener('abort', abort);
+    }
 
-    if (cachedTotal === null) cachedTotal = await readPersistedTotal();
     cachedTotal += delta;
     await persistTotal(cachedTotal);
 
@@ -244,17 +266,21 @@ async function evict(): Promise<void> {
 }
 
 /** Current approximate cache size in bytes (used for the clear-cache prompt). */
-export async function getTotalBytes(): Promise<number> {
-    if (cachedTotal === null) cachedTotal = await readPersistedTotal();
-    return Math.max(0, cachedTotal);
+export function getTotalBytes(): Promise<number> {
+    return serializeMutation(async () => {
+        if (cachedTotal === null) cachedTotal = await readPersistedTotal();
+        return Math.max(0, cachedTotal);
+    });
 }
 
 /** Wipe the entire cache. */
-export async function clearAll(): Promise<void> {
-    const db = await openDb();
-    const tx = db.transaction([STORE_ENTRIES, STORE_META], 'readwrite');
-    tx.objectStore(STORE_ENTRIES).clear();
-    tx.objectStore(STORE_META).clear();
-    await txDone(tx);
-    cachedTotal = 0;
+export function clearAll(): Promise<void> {
+    return serializeMutation(async () => {
+        const db = await openDb();
+        const tx = db.transaction([STORE_ENTRIES, STORE_META], 'readwrite');
+        tx.objectStore(STORE_ENTRIES).clear();
+        tx.objectStore(STORE_META).clear();
+        await txDone(tx);
+        cachedTotal = 0;
+    });
 }

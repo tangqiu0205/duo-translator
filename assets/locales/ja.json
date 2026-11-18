@@ -1,4 +1,10 @@
 {
+  "pageScopeLabel": "翻訳範囲",
+  "pageScopeAll": "ページ全体",
+  "pageScopeMain": "本文のみ",
+  "pageScopeNotFound": "本文が見つかりませんでした。",
+  "pageScopeTranslateFullOnce": "ページ全体を翻訳",
+  "ruleMainContentSelectors": "本文のセレクター",
   "enable": "有効にする",
   "disable": "無効にする",
   "useTranslationServiceCannotBeDisabled": "使用中の翻訳サービスは無効にできません。",

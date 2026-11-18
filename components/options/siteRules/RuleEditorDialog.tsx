@@ -86,6 +86,7 @@ export function RuleEditorDialog({ open, rule, onClose, onSave }: Props) {
   const [excludeUrls, setExcludeUrls] = useState('');
   const [matchSelectors, setMatchSelectors] = useState('');
   const [includeSelectors, setIncludeSelectors] = useState('');
+  const [mainContentSelectors, setMainContentSelectors] = useState('');
   const [excludeSelectors, setExcludeSelectors] = useState('');
   const [injectCss, setInjectCss] = useState('');
   // Has the user edited anything yet? Gates the "required field is empty"
@@ -107,6 +108,7 @@ export function RuleEditorDialog({ open, rule, onClose, onSave }: Props) {
     setExcludeUrls(toLines(rule?.excludeUrls ?? []));
     setMatchSelectors(toLines(rule?.matchSelectors ?? []));
     setIncludeSelectors(toLines(rule?.includeSelectors ?? []));
+    setMainContentSelectors(toLines(rule?.mainContentSelectors ?? []));
     setExcludeSelectors(toLines(rule?.excludeSelectors ?? []));
     setInjectCss(rule?.injectCss.join('\n') ?? '');
   }, [open, rule]);
@@ -137,6 +139,7 @@ export function RuleEditorDialog({ open, rule, onClose, onSave }: Props) {
     const selectors = [
       ...fromLines(matchSelectors),
       ...fromLines(includeSelectors),
+      ...fromLines(mainContentSelectors),
       ...fromLines(excludeSelectors),
     ];
     for (const selector of selectors) {
@@ -150,7 +153,7 @@ export function RuleEditorDialog({ open, rule, onClose, onSave }: Props) {
       }
     }
     return { missing: false, error: '' };
-  }, [includeUrls, excludeUrls, matchSelectors, includeSelectors, excludeSelectors, t]);
+  }, [includeUrls, excludeUrls, matchSelectors, includeSelectors, mainContentSelectors, excludeSelectors, t]);
 
   const canSave = !missing && error === '';
   // The asterisk marking the required field scrolls out of view on a form this
@@ -176,6 +179,7 @@ export function RuleEditorDialog({ open, rule, onClose, onSave }: Props) {
       excludeUrls: fromLines(excludeUrls),
       matchSelectors: fromLines(matchSelectors),
       includeSelectors: fromLines(includeSelectors),
+      mainContentSelectors: fromLines(mainContentSelectors),
       excludeSelectors: fromLines(excludeSelectors),
       injectCss: injectCss.trim() === '' ? [] : [injectCss.trim()],
     });
@@ -250,6 +254,13 @@ export function RuleEditorDialog({ open, rule, onClose, onSave }: Props) {
           value={includeSelectors}
           onChange={edit(setIncludeSelectors)}
           placeholder={'article'}
+          rows={2}
+        />
+        <FormField
+          label={t('ruleMainContentSelectors', 'Main content selectors')}
+          value={mainContentSelectors}
+          onChange={edit(setMainContentSelectors)}
+          placeholder={'.article-title, .article-body'}
           rows={2}
         />
         <FormField

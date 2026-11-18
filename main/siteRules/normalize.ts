@@ -85,6 +85,7 @@ export function normalizeRule(raw: any, warnings: string[]): SiteRule | null {
         excludeUrls: keepValid(toArray(raw.excludeUrls), 'excludeUrls'),
         matchSelectors: toArray(raw.matchSelectors),
         includeSelectors: toArray(raw.includeSelectors),
+        ...(raw.mainContentSelectors !== undefined ? { mainContentSelectors: toArray(raw.mainContentSelectors) } : {}),
         excludeSelectors: toArray(raw.excludeSelectors),
         injectCss: toArray(raw.injectCss),
     };

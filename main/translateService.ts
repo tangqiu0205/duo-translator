@@ -25,7 +25,10 @@ import {
     TRANSLATE_SERVICE,
 } from "@/main/constants";
 import { TranslateResult } from "@/main/translateClient";
-import { aiPageTranslate } from "@/main/aiService";
+import { aiPageTranslateWithProvider, providerTaskParams, resolveAiProviderOrThrow } from "@/main/aiService";
+import type { AiProvider } from "@/main/aiProvider";
+import { checkPublicAbort } from "@/main/publicTranslationRuntime";
+import { stripPlaceholders } from "@/main/builtinAi/placeholders";
 import {
     builtinAiSupported,
     builtinAiTranslateTexts,
@@ -1173,7 +1176,7 @@ export class AiTranslateService extends TranslateService {
     readonly name: string;
     private readonly providerId: string;
 
-    constructor(providerId: string) {
+    constructor(providerId: string, private readonly snapshot?: AiProvider) {
         super();
         this.providerId = providerId;
         this.name = AI_PREFIX + providerId;
@@ -1194,9 +1197,13 @@ export class AiTranslateService extends TranslateService {
         // api key", "insufficient balance", a model name typo) is the most
         // actionable error in the whole pipeline, so it is exactly the one the
         // user must see.
-        const translations = await aiPageTranslate(this.providerId, texts, targetLang, signal ?? undefined);
-        if (!translations) throw new Error("AI provider returned an empty translation response");
-        return translations.map((t) => new TranslateResult(String(t ?? ""), "", 1));
+        const provider = this.snapshot ?? await resolveAiProviderOrThrow(this.providerId);
+        const translations = await aiPageTranslateWithProvider(provider, texts, targetLang, signal ?? undefined);
+        return translations.map(({ text, cacheable }) => {
+            const result = new TranslateResult(text, "", 1);
+            if (!cacheable) result.cacheable = false;
+            return result;
+        });
     }
 
 }
@@ -1253,20 +1260,28 @@ export class FreeTranslateService extends TranslateService {
             // Microsoft truncates oversized individual items; select another route instead.
             && (id !== TRANSLATE_SERVICE.MICROSOFT || texts.every((text) => text.length <= MS_BATCH_CHAR_LIMIT)));
         const result = await freeRouter.run(candidates, config.mode, async (id, attemptSignal) => {
+            // The aggregate cache owns these results. Never consult or populate
+            // the cache of a manually selected service from an automatic attempt.
+            const provider = resolveTranslateService(id);
+            if (!provider) throw new Error(`Unknown free translation service: ${id}`);
+            const scene = options?.scene ? { scene: options.scene } : undefined;
             if (isPublicTranslationService(id)) {
-                const translated = await translateTextsWithCache(id, texts, target, attemptSignal, source, options?.scene);
+                const translated = await provider.translateText(texts, target, attemptSignal, source, scene);
                 if (!translated || translated.length !== texts.length || translated.some((item, index) =>
-                    typeof item?.translatedMappedHtmlText !== 'string' || texts[index].trim() && !item.translatedMappedHtmlText.trim())) {
+                    typeof item?.translatedMappedHtmlText !== 'string'
+                    || (texts[index].trim() && (!item.translatedMappedHtmlText.trim() || item.cacheable === false)))) {
                     throw new Error('Incomplete free translation batch');
                 }
                 return translated;
             }
-            // Native adapters have different HTML conventions. Normalize them to
-            // the same escaped <bN> protocol, repairing markers when necessary.
+            // Normalize the native adapters to the escaped <bN> protocol.
             const translated = await translatePublicMapped(texts, async (queries) => {
-                const items = await translateTextsWithCache(id, queries.map(escapePublicTranslationHtml), target, attemptSignal, source, options?.scene);
-                if (!items) throw new Error(`Unknown free translation service: ${id}`);
-                return items.map((item) => ({ text: decodePublicTranslationText(item.translatedMappedHtmlText), sourceLang: item.sourceLang }));
+                const items = await provider.translateText(queries.map(escapePublicTranslationHtml), target, attemptSignal, source, scene);
+                if (!items) throw new Error(`No result from free translation service: ${id}`);
+                return items.map(item => ({
+                    text: item.cacheable === false ? '' : decodePublicTranslationText(item.translatedMappedHtmlText),
+                    sourceLang: item.sourceLang,
+                }));
             }, attemptSignal);
             return translated.map((item) => new TranslateResult(item.text, item.sourceLang, 1));
         }, signal);
@@ -1332,10 +1347,25 @@ export function transferLanguageCode(language: string, text?: string): string {
 // (cache-get + cache-put) on top of the translation itself.
 // ---------------------------------------------------------------------------
 
-interface CachedTranslation {
-    t: string; // translatedMappedHtmlText
-    s: string; // sourceLang
-    c: number; // score
+type CachedTranslation = translationCache.CachedTranslation;
+
+// Use the saved endpoint template, not the URL with substituted credentials.
+// The explicit version also covers prompt/adapter changes affecting output.
+async function aiCacheNamespace(provider: AiProvider): Promise<string> {
+    let endpoint = provider.url;
+    if (provider.apiKey) {
+        endpoint = endpoint.replaceAll(provider.apiKey, '{key}')
+            .replaceAll(encodeURIComponent(provider.apiKey), '{key}');
+    }
+    const identity = JSON.stringify([provider.id, provider.type, provider.model, endpoint, providerTaskParams(provider)]);
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity));
+    return 'ai:v2:' + Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function fromCache(hit: CachedTranslation): TranslateResult {
+    const result = new TranslateResult(hit.t, hit.s, hit.c);
+    if (hit.actualService) result.actualService = hit.actualService;
+    return result;
 }
 
 /**
@@ -1371,9 +1401,12 @@ function cachePutMany(
     service: string,
     targetLang: string,
     entries: { text: string; value: CachedTranslation }[],
+    keepExisting: boolean,
+    signal?: AbortSignal,
 ): void {
-    if (entries.length === 0) return;
-    void Promise.resolve(translationCache.putMany(service, targetLang, entries)).catch((e: any) => {
+    if (entries.length === 0 || signal?.aborted) return;
+    const options = keepExisting || signal ? [{ keepExisting, signal }] as const : [] as const;
+    void translationCache.putMany(service, targetLang, entries, ...options).catch((e: any) => {
         console.error(APP_NAME_WITH_SUFFIX, "translation cache write failed:", e?.message || e);
     });
 }
@@ -1401,26 +1434,36 @@ export async function translateTextsWithCache(
     if (texts.length === 0) return [];
     let provider = resolveTranslateService(service);
     if (!provider) return undefined;
-    // The pool must select a concrete route before reading/writing its cache.
-    // Never cache by pool id: membership, credentials or model may change.
-    if (service === FREE_TRANSLATION_SERVICE) {
-        return provider.translateText(texts, targetLang, signal, sourceLang, scene ? { scene } : undefined);
-    }
+    checkPublicAbort(signal);
+    const automatic = service === FREE_TRANSLATION_SERVICE;
+    const cacheEnabled = await isTranslationCacheEnabled();
     let namespace = service;
-    if (service === TRANSLATE_SERVICE.BILIBILI) {
+    if (automatic) {
+        namespace = `${FREE_TRANSLATION_SERVICE}:v1:${scene ?? 'text'}`;
+    } else if (service.startsWith(AI_PREFIX) && cacheEnabled) {
+        const snapshot = await resolveAiProviderOrThrow(service.slice(AI_PREFIX.length));
+        provider = new AiTranslateService(snapshot.id, snapshot);
+        namespace = await aiCacheNamespace(snapshot);
+    } else if (service === TRANSLATE_SERVICE.BILIBILI) {
         // Resolve once so a concurrent model edit cannot mix cache namespaces.
         const model = await getBilibiliModel();
         provider = new BilibiliTranslateService(model);
         namespace += ':' + model;
     }
     if (isDoubaoService(service) && scene === 'subtitle') namespace += ':subtitle';
-    const options: TranslateRequestOptions | undefined = scene || onResult ? { scene, onResult } : undefined;
-    if (!(await isTranslationCacheEnabled())) {
+    // No streaming results from an automatic candidate until the entire
+    // candidate has succeeded; it could fail and be replaced by another.
+    const options: TranslateRequestOptions | undefined = scene || (!automatic && onResult)
+        ? { scene, ...(automatic ? {} : { onResult }) } : undefined;
+    checkPublicAbort(signal);
+    if (!cacheEnabled) {
         return provider.translateText(texts, targetLang, signal, sourceLang, options);
     }
 
     const cacheService = sourceLang ? `${namespace}:from:${sourceLang}` : namespace;
-    const cached = await cacheGetMany(cacheService, targetLang, texts);
+    const cached = (await cacheGetMany(cacheService, targetLang, texts))
+        .map(hit => hit?.t.trim() && (!automatic || hit.actualService) ? hit : null);
+    checkPublicAbort(signal);
     const missIndices: number[] = [];
     const missTexts: string[] = [];
     for (let i = 0; i < texts.length; i++) {
@@ -1431,17 +1474,18 @@ export async function translateTextsWithCache(
     }
 
     cached.forEach((hit, index) => {
-        if (hit && !signal?.aborted) onResult?.(index, new TranslateResult(hit.t, hit.s, hit.c));
+        if (hit && !signal?.aborted) onResult?.(index, fromCache(hit));
     });
     let fetched: TranslateResult[] = [];
     if (missTexts.length > 0) {
-        const missOptions = onResult ? { ...options,
+        const missOptions = onResult && !automatic ? { ...options,
             onResult: (index: number, result: TranslateResult) => {
                 if (!Number.isInteger(index) || index < 0 || index >= missIndices.length) throw new Error('Invalid translation progress index');
                 if (!signal?.aborted) onResult(missIndices[index], result);
             },
         } : options;
         const r = await provider.translateText(missTexts, targetLang, signal, sourceLang, missOptions);
+        checkPublicAbort(signal);
         if (!r) return undefined; // unknown service → bail like before
         // Provider must answer 1:1 with the inputs. If it doesn't, the
         // positional remap below would misalign — fall back to a full
@@ -1455,20 +1499,24 @@ export async function translateTextsWithCache(
     const results: TranslateResult[] = new Array(texts.length);
     for (let i = 0; i < texts.length; i++) {
         const hit = cached[i];
-        if (hit) results[i] = new TranslateResult(hit.t, hit.s, hit.c);
+        if (hit) results[i] = fromCache(hit);
     }
     const toCache: { text: string; value: CachedTranslation }[] = [];
     for (let f = 0; f < missIndices.length; f++) {
         const idx = missIndices[f];
         const r = fetched[f];
         results[idx] = r;
+        if (!r || r.cacheable === false || !r.translatedMappedHtmlText.trim()) continue;
+        if (automatic && (!r.actualService || !stripPlaceholders(decodePublicTranslationText(texts[idx])).trim()
+            || !stripPlaceholders(decodePublicTranslationText(r.translatedMappedHtmlText)).trim())) continue;
         toCache.push({
             text: texts[idx],
-            value: { t: r.translatedMappedHtmlText, s: r.sourceLang, c: r.score },
+            value: { t: r.translatedMappedHtmlText, s: r.sourceLang, c: r.score,
+                ...(r.actualService ? { actualService: r.actualService } : {}) },
         });
     }
 
-    cachePutMany(cacheService, targetLang, toCache);
+    cachePutMany(cacheService, targetLang, toCache, automatic, signal);
     return results;
 }
 //#endregion

@@ -1,4 +1,10 @@
 {
+  "pageScopeLabel": "Übersetzungsbereich",
+  "pageScopeAll": "Ganze Seite",
+  "pageScopeMain": "Nur Hauptinhalt",
+  "pageScopeNotFound": "Kein Hauptinhalt gefunden.",
+  "pageScopeTranslateFullOnce": "Ganze Seite übersetzen",
+  "ruleMainContentSelectors": "Selektoren für Hauptinhalt",
   "enable": "Aktivieren",
   "disable": "Deaktivieren",
   "useTranslationServiceCannotBeDisabled": "Der aktuell verwendete Übersetzungsdienst kann nicht deaktiviert werden.",

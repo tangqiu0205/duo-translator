@@ -1,4 +1,10 @@
 {
+  "pageScopeLabel": "번역 범위",
+  "pageScopeAll": "전체 페이지",
+  "pageScopeMain": "본문만",
+  "pageScopeNotFound": "본문을 찾지 못했습니다.",
+  "pageScopeTranslateFullOnce": "전체 페이지 번역",
+  "ruleMainContentSelectors": "본문 선택자",
   "enable": "할 수 있게 하다",
   "disable": "장애를 입히다",
   "useTranslationServiceCannotBeDisabled": "현재 사용 중인 번역 서비스를 비활성화할 수 없습니다.",

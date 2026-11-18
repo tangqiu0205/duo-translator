@@ -549,6 +549,15 @@ export async function aiPageTranslate(
     signal?: AbortSignal,
 ): Promise<string[]> {
     const provider = await resolveAiProviderOrThrow(providerId);
+    return (await aiPageTranslateWithProvider(provider, texts, targetLang, signal)).map(item => item.text);
+}
+
+export async function aiPageTranslateWithProvider(
+    provider: AiProvider,
+    texts: string[],
+    targetLang: string,
+    signal?: AbortSignal,
+): Promise<{ text: string; cacheable: boolean }[]> {
     const qwenMt = getAiProtocol(provider) === "qwen-mt";
 
     const all = texts ?? [];
@@ -578,12 +587,12 @@ export async function aiPageTranslate(
     }
     if (cur.length > 0) batches.push({ start: curStart, texts: cur });
 
-    const results: string[] = new Array(all.length);
+    const results: { text: string; cacheable: boolean }[] = new Array(all.length);
 
     // Translate one batch and write its results back at the right offset.
     const runBatch = async (batch: { start: number; texts: string[] }) => {
         if (qwenMt && batch.texts.every((text) => !text.trim())) {
-            batch.texts.forEach((text, index) => { results[batch.start + index] = text; });
+            batch.texts.forEach((text, index) => { results[batch.start + index] = { text, cacheable: false }; });
             return;
         }
         // Neutralize a literal separator inside a segment: it would otherwise
@@ -602,8 +611,10 @@ export async function aiPageTranslate(
         // (model chatter around the payload, trailing separator) are trimmed.
         const parts = full.split(SEPARATOR_TAG);
         if (!qwenMt) {
-            while (parts.length > 0 && parts[0].trim() === "") parts.shift();
-            while (parts.length > 0 && parts[parts.length - 1].trim() === "") parts.pop();
+            // A spare delimiter may frame the batch; exact-count blanks are
+            // real slots and must never shift the rest of the translations.
+            while (parts.length > batch.texts.length && parts[0].trim() === "") parts.shift();
+            while (parts.length > batch.texts.length && parts[parts.length - 1].trim() === "") parts.pop();
         }
 
         // Qwen-MT receives source text only, so reject lost boundaries before mapping translations to the page.
@@ -627,7 +638,13 @@ export async function aiPageTranslate(
             // Missing/empty segments fall back to the source text so indices
             // never drift out of alignment with the input array.
             // todo fallback to machine translation
-            results[batch.start + i] = value;
+            results[batch.start + i] = {
+                text: value,
+                // A mismatched batch cannot establish that a response slot
+                // actually belongs to this source, even if it is nonempty.
+                cacheable: parts.length === batch.texts.length && Boolean(out?.trim())
+                    && (!qwenMt || Boolean(batch.texts[i].trim())),
+            };
         }
     };
 

@@ -1,4 +1,10 @@
 {
+  "pageScopeLabel": "Область перевода",
+  "pageScopeAll": "Вся страница",
+  "pageScopeMain": "Только основной текст",
+  "pageScopeNotFound": "Основной текст не найден.",
+  "pageScopeTranslateFullOnce": "Перевести всю страницу",
+  "ruleMainContentSelectors": "Селекторы основного текста",
   "enable": "Давать возможность",
   "disable": "Запрещать",
   "useTranslationServiceCannotBeDisabled": "Используемая служба перевода не может быть отключена.",

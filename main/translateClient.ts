@@ -25,6 +25,8 @@ export class TranslateResult {
     sourceLang: string;
     /** Concrete route selected by the free-service pool, including cache hits. */
     actualService?: string;
+    /** Background-only: source fallback or an ambiguous batch must not be persisted. */
+    cacheable?: false;
     score: number;
     rawText: string = "";
     rawTextLength: number = 0; // original text length, sum of all text nodes length

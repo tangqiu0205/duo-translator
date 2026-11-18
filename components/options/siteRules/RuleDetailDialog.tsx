@@ -47,6 +47,7 @@ export function RuleDetailDialog({ rule, onClose }: Props) {
           <Field label={t('ruleExcludeUrls', 'Exclude URLs')} values={rule.excludeUrls} />
           <Field label={t('ruleMatchSelectors', 'Only on pages matching')} values={rule.matchSelectors} />
           <Field label={t('ruleIncludeSelectors', 'Translate only')} values={rule.includeSelectors} />
+          {!!rule.mainContentSelectors?.length && <Field label={t('ruleMainContentSelectors', 'Main content selectors')} values={rule.mainContentSelectors} />}
           <Field label={t('ruleExcludeSelectors', 'Never translate')} values={rule.excludeSelectors} />
           <Field label={t('ruleInjectCss', 'Inject CSS')} values={rule.injectCss} />
         </div>

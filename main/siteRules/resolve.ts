@@ -67,6 +67,7 @@ export function selectCandidates(
                         key,
                         matchSelectors: rule.matchSelectors,
                         includeSelectors: rule.includeSelectors,
+                        ...(rule.mainContentSelectors?.length ? { mainContentSelectors: rule.mainContentSelectors } : {}),
                         excludeSelectors: rule.excludeSelectors,
                         injectCss: rule.injectCss,
                     });
@@ -95,6 +96,7 @@ export function mergeCandidates(
     const matchedIds: string[] = [];
     // Per-tier include lists, same index as `tiers`; picked over at the end.
     const includePerTier: string[][] = tiers.map(() => []);
+    const mainPerTier: string[][] = tiers.map(() => []);
 
     tiers.forEach((tier, tierIndex) => {
         for (const rule of tier) {
@@ -111,6 +113,9 @@ export function mergeCandidates(
                     includePerTier[tierIndex].push(selector);
                 }
             }
+            for (const selector of rule.mainContentSelectors ?? []) {
+                if (!mainPerTier[tierIndex].includes(selector)) mainPerTier[tierIndex].push(selector);
+            }
             cssChunks.push(...rule.injectCss);
         }
     });
@@ -124,8 +129,10 @@ export function mergeCandidates(
         }
     }
 
+    const mainContentSelectors = mainPerTier.reverse().find(selectors => selectors.length > 0);
     return {
         includeSelectors,
+        ...(mainContentSelectors ? { mainContentSelectors } : {}),
         excludeSelectors,
         injectCss: cssChunks.join('\n'),
         matchedIds,

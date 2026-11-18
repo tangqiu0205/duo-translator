@@ -2,6 +2,7 @@ import { alignSentenceBlocks, splitSentence, wrapTextNode2Span } from "@/main/do
 import { TAB_ACTION, TRANSLATE_STATUS_KEY, CONFIG_KEY, DB_ACTION, TRANSLATE_SERVICE, DOMAIN_STRATEGY, TRANSLATE_ACTION, ACTION, STORAGE_ACTION, VIEW_STRATEGY, DEFAULT_STRATEGY, ELEMENT_STATUS, APP_NAME, APP_NAME_WITH_SUFFIX, DEFAULT_VALUE, STATUS_SUCCESS, CONFIG_VALUE_TO_KEY, LANGUAGES_MAP, IS_FIREFOX, browserTargetLanguage, FLOAT_BALL_STYLE, EXTENSION_INVALID_CONTEXT_MSG, STYLE_BLUR, TRANSLATING_ANIMATION, IS_MAC } from "./constants";
 import { restore, translateParams, getTranslateResult, translate, TranslateResult } from "./translateClient";
 import { buildNoTranslateLanguageSet, isNoTranslateLanguage } from "./noTranslateLanguage";
+import { findMainContentRoots, NON_ARTICLE_SELECTOR, type PageTranslationScope } from './pageTranslationScope';
 import { PageTranslationQueue, batchPageUnits } from './pageTranslationQueue';
 import { hasMinimumTranslationTextLength, normalizeMinTranslationTextLength } from './translationTextLength';
 import { partitionByLocalLanguage } from "./noTranslateLanguageFilter";
@@ -91,6 +92,7 @@ import {
 import {
     deepQuerySelector,
     forgetDisconnectedRoots,
+    attachOwnShadow,
     isOwnHost,
     knownRoots,
     noteElement,
@@ -767,9 +769,9 @@ export async function content() {
     // get all config from storage
     let [rules, viewStrategy, targetLanguageConfig, translateServiceConfig, globalSwitch, defaultStrategy,
         rawDomainStrategy, floatBallSwitch, floatBallStyleConfig, bilingualHighlightingSwitch, bilingualHighlightingMinSentences, translationLineBreakMinChars, aiTranslateServiceKey,
-        aiTargetLanguageConfig, contextMenuSwitch, translateStatusConfig, translatingAnimationConfig, noTranslateLanguagesConfig, minTranslationTextLengthConfig]
+        aiTargetLanguageConfig, contextMenuSwitch, translateStatusConfig, translatingAnimationConfig, noTranslateLanguagesConfig, minTranslationTextLengthConfig, pageScopeConfig]
         : [string[], VIEW_STRATEGY, string | undefined, string | undefined, boolean, string, any, boolean, string, boolean, number,
-            number, string | undefined, string, boolean, boolean, string | undefined, string[] | undefined, unknown]
+            number, string | undefined, string, boolean, boolean, string | undefined, string[] | undefined, unknown, unknown]
         = await Promise.all(
             [
                 listRuleFromDB(domainWithPort),
@@ -791,9 +793,18 @@ export async function content() {
                 getConfig(CONFIG_KEY.TRANSLATING_ANIMATION),
                 getConfig(CONFIG_KEY.NO_TRANSLATE_LANGUAGES),
                 getConfig(CONFIG_KEY.MIN_TRANSLATION_TEXT_LENGTH),
+                getConfig(CONFIG_KEY.PAGE_TRANSLATION_SCOPE),
             ]
         )
     translateStatus = !!translateStatusConfig
+    let pageScope: PageTranslationScope = pageScopeConfig === 'main' ? 'main' : 'all'
+    let temporaryFullPage = false
+    let mainRoots: HTMLElement[] = []
+    let scopeScan = new AbortController()
+    let scopeTask: Promise<void> | null = null
+    let scopeNotice: HTMLElement | null = null
+    const pageRecords = new WeakSet<BilingualUnitRecord | TranslateResult>()
+    const mainOnly = () => pageScope === 'main' && !temporaryFullPage
     // Every frame keeps its own copy: the inline markers are drawn in the frame
     // that owns the paragraph, and in corner mode a sub-frame still has to know
     // it should report instead of staying silent.
@@ -921,7 +932,9 @@ export async function content() {
                 target.textContent = text
                 queueMicrotask(() => ignoreMutationElements.delete(target))
             }
-            if (translated && globalSwitch) void translateParagraphElements([p], { sourceRepairRanges })
+            if (translated && globalSwitch && !scopeTask) {
+                void translateParagraphElements([p], { sourceRepairRanges, manualParagraph: !inPageScope(p) }, !inPageScope(p))
+            }
         })
     }
 
@@ -954,7 +967,7 @@ export async function content() {
             }
 
             // Cheap structural skip — bail before queueing.
-            if (isIgnoreMutationElement(target)) { markLanguagePreflightMutation(target); continue; }
+            if (isOwnHost(target) || isIgnoreMutationElement(target)) { markLanguagePreflightMutation(target); continue; }
             // console.debug('mutation target', target);
             // console.debug('start mutation');
             // Removals are only *flagged* here. Cleaning them up per removed
@@ -980,7 +993,7 @@ export async function content() {
             // observation up here. See main/dom/observeTargets.ts.
             for (const el of containersFor(item.target)) {
                 // translated and translating elements should be ignored
-                if (paragraphElementMap.get(el) != ELEMENT_STATUS.ORIGINAL) {
+                if (scopeTask || !inPageScope(el) || paragraphElementMap.get(el) != ELEMENT_STATUS.ORIGINAL) {
                     continue
                 }
                 batchElements.push(el)
@@ -1030,6 +1043,9 @@ export async function content() {
             case TRANSLATE_ACTION.TRANSLATE:
                 console.debug('start translate page')
                 await translateAction()
+                break
+            case TRANSLATE_ACTION.TRANSLATE_FULL_PAGE_ONCE:
+                await useTemporaryFullPage()
                 break
             case TRANSLATE_ACTION.SHOW_ORIGINAL:
                 console.debug('start restore original page')
@@ -1256,6 +1272,12 @@ export async function content() {
                     await unloadTask
                     if (globalSwitch && pageLifecycle.signal.aborted) await init()
                 }
+                break
+            case CONFIG_KEY.PAGE_TRANSLATION_SCOPE:
+                if ((value !== 'all' && value !== 'main') || (value === pageScope && !temporaryFullPage)) return
+                pageScope = value
+                temporaryFullPage = false
+                await changePageScope()
                 break
             case CONFIG_KEY.VIEW_STRATEGY:
                 if (!value || typeof value !== "string") return
@@ -1676,6 +1698,19 @@ export async function content() {
         // deepElementFromPoint: the native call retargets to the shadow HOST, so
         // inside a component it would resolve to the wrong container (or none).
         const hit = deepElementFromPoint(x, y)
+        if (mainOnly() && !closestParagraph(hit)) {
+            // Pointer gestures remain available outside the page scope. Find
+            // the local paragraph without eagerly marking the rest of the page.
+            for (let node: Node | null = hit; node && node !== document.body; node = parentOrHost(node)) {
+                if (!(node instanceof HTMLElement) && !isShadowRoot(node)) continue
+                if (node instanceof HTMLElement && (isNotMarkElement(node) || isEditable(node))) break
+                const seg = segmentParagraph(node)
+                if (seg.units.length) {
+                    markParagraph(node, false, seg.descendChildren.length > 0)
+                    break
+                }
+            }
+        }
         const container = closestParagraph(hit)
         if (!container) return null
 
@@ -1760,7 +1795,7 @@ export async function content() {
         if (translated) {
             restoreOriginalParagraphElement(container)
         } else {
-            translateParagraphElements([container])
+            translateParagraphElements([container], { manualParagraph: true })
         }
     }
 
@@ -1884,11 +1919,16 @@ export async function content() {
             if (window.location.href !== currentUrl) {
                 currentUrl = window.location.href;
                 await refreshSiteRules(currentUrl, signal);
+                if (!signal.aborted && (temporaryFullPage || mainOnly())) {
+                    temporaryFullPage = false
+                    await changePageScope()
+                }
             } else if (siteRulesConditional && refreshCompiledSiteRules()) {
                 // A page-identity marker changed without the URL changing
                 // (hydration, a client-side view swap). Re-probing costs one
                 // querySelector per conditional rule, once per scan cycle.
                 syncSiteRuleCss();
+                if (mainOnly()) await changePageScope()
             }
             // console.debug("processPendingMutations ", pendingMarkRoots.size);
 
@@ -1897,6 +1937,10 @@ export async function content() {
             // Both conditions are re-read here rather than latched, and nothing
             // awaits between leaving this loop and clearing `processingActive`,
             // so the observer can never flag a sweep that no one comes back for.
+            if (!signal.aborted && mainOnly() && (mainRoots.length === 0 || mainRoots.some(root => !root.isConnected))) {
+                const roots = getMainRoots()
+                if (roots.length || mainRoots.length) await changePageScope(roots)
+            }
             while (!signal.aborted && (detachSweepPending || pendingMarkRoots.size > 0)) {
                 if (detachSweepPending) {
                     // Before the scan, not after: it is what makes the roots
@@ -1931,18 +1975,26 @@ export async function content() {
                     // that was flipped ON midway through the scan.
                     const handed = new Set<UnitContainer>();
                     const observeCollected = (batch: UnitContainer[]) => {
-                        if (!translateStatus) return;
+                        if (!translateStatus || scopeTask) return;
                         for (const ele of batch) {
+                            if (!inPageScope(ele)) continue;
                             if (handed.has(ele)) continue;
                             handed.add(ele);
                             paragraphElementMap.set(ele, ELEMENT_STATUS.ORIGINAL);
                             observeContainer(intersectionObserver, ele);
                         }
                     };
-                    const collected = await markParagraphElement(root, observeCollected, signal);
+                    const currentScope = scopeScan.signal
+                    const scopedRoot = inPageScope(root)
+                    const hasManualRecord = (bilingualTranslatedElementMap.get(root)?.some(record => !pageRecords.has(record))
+                        || translatedElementMap.get(root)?.some(result => !pageRecords.has(result)));
+                    const collected = scopedRoot
+                        ? await markParagraphElement(root, observeCollected, signal, false, currentScope)
+                        : hasManualRecord ? [root] : [];
                     if (signal.aborted) return;
-                    if (!translateStatus) {
-                        // Page translation is off, so nothing here may START
+                    if (currentScope.aborted) continue;
+                    if (!translateStatus || !scopedRoot) {
+                        // Page translation is off or outside the selected range, so nothing here may START
                         // translating. One exception: a container the user
                         // translated by hand, which the page has since changed —
                         // its translation now sits next to text it does not
@@ -2095,6 +2147,7 @@ export async function content() {
      */
     async function init() {
         if (pageLifecycle.signal.aborted) pageLifecycle = new AbortController()
+        if (scopeScan.signal.aborted) scopeScan = new AbortController()
         const lifecycle = pageLifecycle.signal
         if (controller.signal.aborted) controller = new AbortController()
         try {
@@ -2173,6 +2226,9 @@ export async function content() {
         // await or DOM restoration. Re-enabling creates a fresh session.
         pageLifecycle.abort()
         startupTranslationActive = false
+        scopeScan.abort()
+        temporaryFullPage = false
+        removeScopeNotice()
         controller.abort()
         if (pendingProcessTimer != null) clearTimeout(pendingProcessTimer)
         pendingProcessTimer = null
@@ -2236,6 +2292,136 @@ export async function content() {
         }
     }
 
+    function getMainRoots() {
+        const body = documentBody()
+        return mainOnly() && isTopFrame && body ? findMainContentRoots(body, siteRules.mainContentSelector) : []
+    }
+
+    function inPageScope(node: Node): boolean {
+        if (!mainOnly()) return true
+        for (let current: Node | null = node; current; current = parentOrHost(current)) {
+            if (current instanceof Element && current.matches(NON_ARTICLE_SELECTOR)) return false
+            if (current instanceof HTMLElement && mainRoots.includes(current)) return current.isConnected
+        }
+        return false
+    }
+
+    function scopeAllowsNodes(container: UnitContainer, nodes: Iterable<Node>): boolean {
+        if (!mainOnly()) return true
+        if (!inPageScope(container)) return false
+        for (const node of nodes) {
+            if (!inPageScope(node)) return false
+            if (node instanceof Element && node.querySelector(NON_ARTICLE_SELECTOR)) return false
+        }
+        return true
+    }
+
+    function pageUnitAllowed(unit: TranslationUnit) {
+        return scopeAllowsNodes(unit.container, unit.nodes)
+    }
+
+    function removeScopeNotice() {
+        scopeNotice?.remove()
+        scopeNotice = null
+    }
+
+    async function updateScopeNotice() {
+        if (!isTopFrame || !globalSwitch || !translateStatus || !mainOnly() || mainRoots.length) {
+            removeScopeNotice()
+            return
+        }
+        if (scopeNotice) return
+        const { t } = await import('./aiWriting/i18n')
+        if (!globalSwitch || !translateStatus || !mainOnly() || mainRoots.length || scopeNotice) return
+        const host = document.createElement('div')
+        host.id = 'fluento-page-scope-notice'
+        host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647'
+        const shadow = attachOwnShadow(host)
+        const style = document.createElement('style')
+        style.textContent = `
+          :host { color-scheme: light dark; }
+          div { display:flex; align-items:center; flex-wrap:wrap; gap:10px; max-width:min(340px,calc(100vw - 48px)); padding:10px 12px; border:1px solid color-mix(in srgb, CanvasText 24%, transparent); border-radius:10px; background:Canvas; color:CanvasText; box-shadow:0 2px 12px #0003; font:13px/1.4 system-ui,sans-serif; }
+          button { cursor:pointer; border:0; border-radius:6px; padding:5px 9px; font:600 13px system-ui,sans-serif; color:HighlightText; background:Highlight; }
+        `
+        const notice = document.createElement('div')
+        notice.setAttribute('role', 'status')
+        const label = document.createElement('span')
+        label.textContent = t('pageScopeNotFound', 'Main content not found.')
+        const action = document.createElement('button')
+        action.type = 'button'
+        action.textContent = t('pageScopeTranslateFullOnce', 'Translate full page')
+        action.onclick = () => {
+            void useTemporaryFullPage()
+            relayToSubframes(TRANSLATE_ACTION.TRANSLATE_FULL_PAGE_ONCE)
+        }
+        notice.append(label, action)
+        shadow.append(style, notice)
+        scopeNotice = host
+        document.documentElement.append(host)
+    }
+
+    async function useTemporaryFullPage() {
+        if (!globalSwitch || !mainOnly()) return
+        temporaryFullPage = true
+        await changePageScope()
+        if (temporaryFullPage && !translateStatus) await translateAction()
+    }
+
+    async function changePageScope(roots = getMainRoots()) {
+        mainRoots = roots
+        removeScopeNotice()
+        scopeScan.abort()
+        scopeScan = new AbortController()
+        const scope = scopeScan.signal
+        const lifecycle = pageLifecycle.signal
+        if (lifecycle.aborted || !globalSwitch) return
+        controller.abort()
+        if (batchTimer != null) clearTimeout(batchTimer)
+        batchTimer = null
+        batchElements = []
+        intersectionObserver.disconnect()
+        resetObserveTargets()
+        paragraphElementMap.clear()
+        lengthSkippedContainers.clear()
+        languageSkippedContainers.clear()
+        filterRecheckContainers.clear()
+        clearTranslateIndicators()
+        const previous = scopeTask
+        const task = (async () => {
+            await Promise.allSettled([previous, translateTask, restoreOriginalTask, ...pendingTranslateParagraphElementsTask])
+            if (scope.aborted || lifecycle.aborted) return
+            for (const [container, records] of bilingualTranslatedElementMap) {
+                const outside = records.filter(record => pageRecords.has(record)
+                    && !scopeAllowsNodes(container, nodesInRange(container, record.range)))
+                if (outside.length) restoreBilingualRecords(container, outside)
+            }
+            for (const [container, results] of translatedElementMap) {
+                if (scope.aborted || lifecycle.aborted) return
+                const outside = results.filter(result => pageRecords.has(result)
+                    && !scopeAllowsNodes(container, nodesInRange(container, result.unitRange ?? { start: null, end: null })))
+                if (outside.length) await restoreSingleResults(container, outside)
+            }
+            if (scope.aborted || lifecycle.aborted) return
+            await markDocument()
+        })()
+        scopeTask = task
+        try {
+            await task
+        } finally {
+            if (scopeTask === task) scopeTask = null
+        }
+        if (scope.aborted || lifecycle.aborted) return
+        controller = new AbortController()
+        if (translateStatus) {
+            for (const element of needsTranslateParagraphs()) {
+                if (!inPageScope(element) || !element.isConnected) continue
+                paragraphElementMap.set(element, ELEMENT_STATUS.ORIGINAL)
+                observeContainer(intersectionObserver, element)
+            }
+        }
+        void updateScopeNotice()
+    }
+
     async function initTranslate(lifecycle: AbortSignal) {
         // The first marking scan is the earliest consumer of the website rules,
         // so this is where the request started at entry is collected.
@@ -2243,10 +2429,12 @@ export async function content() {
         await awaitSiteRules(lifecycle)
         if (lifecycle.aborted) return
         startObserveDom()
+        mainRoots = getMainRoots()
+        const initialScope = scopeScan.signal
         const observeCollected = (elements: UnitContainer[]) => {
-            if (lifecycle.aborted || !globalSwitch || !translateStatus || restoreOriginalTask) return
+            if (lifecycle.aborted || initialScope.aborted || !globalSwitch || !translateStatus || restoreOriginalTask) return
             for (const element of elements) {
-                if (!element.isConnected || paragraphElementMap.has(element)) continue
+                if (!element.isConnected || !inPageScope(element) || paragraphElementMap.has(element)) continue
                 paragraphElementMap.set(element, ELEMENT_STATUS.ORIGINAL)
                 observeContainer(intersectionObserver, element)
             }
@@ -2276,6 +2464,7 @@ export async function content() {
         }
         if (lifecycle.aborted) return
         markStartupReady()
+        updateScopeNotice()
         warnOnRuleMiss()
         if (needs !== undefined || signal.aborted || signal !== controller.signal || !globalSwitch || translateStatus) return
         pageLanguage = await detectLanguage(htmlElements, signal)
@@ -2283,6 +2472,7 @@ export async function content() {
         if (autoNeedsTranslate()) {
             await startTranslation()
             observeCollected(htmlElements)
+            updateScopeNotice()
         }
     }
 
@@ -2470,6 +2660,7 @@ export async function content() {
         const next = applyTranslateAllOverride(compileCandidates(siteRuleCandidates))
         const changed = next.includeSelector !== siteRules.includeSelector
             || next.excludeSelector !== siteRules.excludeSelector
+            || next.mainContentSelector !== siteRules.mainContentSelector
             || next.injectCss !== siteRules.injectCss
         siteRules = next
         return changed
@@ -2654,7 +2845,13 @@ export async function content() {
     async function retranslateNeedsTranslateParagraphs() {
         // some elements probably have been translated
         await restoreOriginalPage(false)
+        if (mainOnly()) {
+            mainRoots = getMainRoots()
+            await markDocument()
+            updateScopeNotice()
+        }
         needsTranslateParagraphs().forEach((ele) => {
+            if (!inPageScope(ele)) return
             paragraphElementMap.set(ele, ELEMENT_STATUS.ORIGINAL)
             // console.debug("translateAction observe element");
 
@@ -2791,6 +2988,7 @@ export async function content() {
     }
 
     async function translateAction() {
+        while (scopeTask) await scopeTask
         if (translateTask || !globalSwitch || pageLifecycle.signal.aborted) {
             return
         }
@@ -2812,7 +3010,9 @@ export async function content() {
             if (translateService === TRANSLATE_SERVICE.BUILTIN) {
                 void sendMessageToBackground({ action: ACTION.BUILTIN_AI_RESUME_DOWNLOAD })
             }
+            const signal = controller.signal
             await updateTranslateStatus(true)
+            if (signal.aborted || lifecycle.aborted) return
             await retranslateNeedsTranslateParagraphs()
         }
         translateTask = action()
@@ -2826,6 +3026,8 @@ export async function content() {
         if (restoreOriginalTask) {
             return
         }
+        temporaryFullPage = false
+        removeScopeNotice()
         // BEFORE anything asynchronous, including the `restoreOriginalTask`
         // guard's own awaits. "Show me the original" is an instant intent, and
         // everything below it waits: on a translate task, on the provider
@@ -3216,9 +3418,17 @@ export async function content() {
      * was decided. Scanning nothing is right in both cases: the <html>-level
      * observer re-roots marking on a fresh <body> when one is added.
      */
-    function markDocument(onCollected?: (batch: UnitContainer[]) => void): Promise<UnitContainer[]> {
+    async function markDocument(onCollected?: (batch: UnitContainer[]) => void): Promise<UnitContainer[]> {
         const body = documentBody()
-        return body ? markParagraphElement(body, onCollected, pageLifecycle.signal, Boolean(onCollected)) : Promise.resolve([])
+        const lifecycle = pageLifecycle.signal
+        const scope = scopeScan.signal
+        const collected: UnitContainer[] = []
+        for (const root of mainOnly() ? mainRoots : body ? [body] : []) {
+            if (lifecycle.aborted || scope.aborted) break
+            const batch = await markParagraphElement(root, onCollected, lifecycle, Boolean(onCollected), scope)
+            for (const element of batch) collected.push(element)
+        }
+        return collected
     }
 
     /**
@@ -3242,7 +3452,10 @@ export async function content() {
         onCollected: ((batch: UnitContainer[]) => void) | undefined,
         signal: AbortSignal,
         initialScan = false,
+        scope?: AbortSignal,
     ): Promise<UnitContainer[]> {
+        if (signal.aborted || scope?.aborted) return [];
+        const scoped = scope !== undefined && mainOnly();
         let notTranslate = false;
         const rawElement = element;
         const collectElements: UnitContainer[] = [];
@@ -3298,6 +3511,7 @@ export async function content() {
             if (!isShadowRoot(p)) {
                 // A rendered <script> is transparent here as it is in the
                 // descent below: never a mark, never a reason to stop.
+                if (scoped && p.matches(NON_ARTICLE_SELECTOR)) return collectElements;
                 if (!isRenderedScript(p) && isNotMarkElement(p)) return collectElements;
                 if (!notTranslate && noTranslateOf(p)) notTranslate = true;
                 // Accumulate the include flag here too: a mutation-driven re-scan
@@ -3305,7 +3519,7 @@ export async function content() {
                 // would look like it is outside one.
                 if (!inInclude && matchesSelector(p, includeSelector)) inInclude = true;
             }
-            if (isParagraph(p)) {
+            if (isParagraph(p) && (!scoped || inPageScope(p))) {
                 if (isMixedParagraph(p)) {
                     // Mixed container: a mutation under one of its block-ish
                     // children belongs to a deeper unit — keep walking inward
@@ -3356,7 +3570,7 @@ export async function content() {
                     // kept at the single write site instead — translateUnits.
                     drain();
                     await yieldToBrowser(initialScan && startupTranslationActive && translateStatus);
-                    if (signal.aborted) return [];
+                    if (signal.aborted || scope?.aborted) return [];
                     chunkStart = performance.now();
                 }
                 const frame = stack.pop()!;
@@ -3384,6 +3598,7 @@ export async function content() {
                     // A <script> a widget renders into (see isRenderedScript) is
                     // excluded like any script for its own text, but its element
                     // children are the widget — descend into them below.
+                    if (scoped && el.matches(NON_ARTICLE_SELECTOR)) continue;
                     const renderedScript = isRenderedScript(el);
                     if (!renderedScript && isNotMarkElement(el)) continue;
                     if (!nt && noTranslateOf(el)) nt = true;
@@ -3464,7 +3679,7 @@ export async function content() {
             // The last chunk's discoveries, plus anything still queued if the
             // walk threw: a root left unstyled would render its translations
             // (and its `::highlight()` paint) with no CSS at all.
-            if (!signal.aborted) flushShadowRootStyles();
+            if (!signal.aborted && !scope?.aborted) flushShadowRootStyles();
         }
         drain();
         return collectElements;
@@ -3687,9 +3902,7 @@ export async function content() {
          */
         staleOnly = false,
     ) {
-        if (elements.length == 0) {
-            return
-        }
+        if (elements.length === 0 || (scopeTask && !context?.manualParagraph)) return
         console.debug('translateParagraphElements: ', elements.length)
         // @debuglog
         // elements.forEach((element) => {
@@ -3706,6 +3919,7 @@ export async function content() {
         const units: TranslationUnit[] = []
         const replacements = new Map<TranslationUnit, UnitReplacement>()
         for (const element of elements) {
+            if (!staleOnly && !context?.manualParagraph && !inPageScope(element)) continue
             if (!staleOnly && !ignoreMutationElements.has(element)) {
                 lengthSkippedContainers.delete(element);
                 languageSkippedContainers.delete(element);
@@ -3744,7 +3958,7 @@ export async function content() {
             // Repair mode only ever runs with the page switch off, i.e. on a
             // paragraph the user translated by hand — so a failure belongs to
             // that gesture, not to a page translation the user never started.
-            staleOnly ? ERROR_SCOPE.PARAGRAPH_TRANSLATE : ERROR_SCOPE.PAGE_TRANSLATE,
+            staleOnly || context?.manualParagraph ? ERROR_SCOPE.PARAGRAPH_TRANSLATE : ERROR_SCOPE.PAGE_TRANSLATE,
             replacements,
         )
     }
@@ -3882,7 +4096,8 @@ export async function content() {
     ) {
         const snapshot = { service: translateService, targetLanguage, viewStrategy, signal: controller?.signal };
         allUnits = filterUnitsByTextLength(
-            allUnits.filter(unit => !ignoreMutationElements.has(unit.container)), errorScope, replacements,
+            allUnits.filter(unit => !ignoreMutationElements.has(unit.container)
+                && (errorScope !== ERROR_SCOPE.PAGE_TRANSLATE || pageUnitAllowed(unit))), errorScope, replacements,
         );
         const priority = (units: TranslationUnit[]) => Math.min(...units.map(unit => {
             const element = unit.container instanceof ShadowRoot ? unit.container.host : unit.container;
@@ -3921,7 +4136,8 @@ export async function content() {
         // A container whose guard is already set has a translation in flight —
         // drop its units so we never translate the same text twice.
         const guardedUnits = filterUnitsByTextLength(
-            allUnits.filter(u => !ignoreMutationElements.has(u.container)), errorScope, replacements,
+            allUnits.filter(u => !ignoreMutationElements.has(u.container)
+                && (errorScope !== ERROR_SCOPE.PAGE_TRANSLATE || pageUnitAllowed(u))), errorScope, replacements,
         )
         let units = guardedUnits;
         if (units.length === 0) return;
@@ -4038,7 +4254,8 @@ export async function content() {
             const commitResults = async (result: TranslateResult) => {
                 const unit = result.unit!;
                 // Never overwrite a page edit or a restored/cancelled session.
-                if (signal?.aborted || !unit.container.isConnected) return;
+                if (signal?.aborted || !globalSwitch || !unit.container.isConnected
+                    || (errorScope === ERROR_SCOPE.PAGE_TRANSLATE && !pageUnitAllowed(unit))) return;
                 if (sources.get(unit)?.some(({ node, text }) => !node.isConnected || node.textContent !== text)) {
                     staleContainers.add(unit.container);
                     return;
@@ -4083,6 +4300,7 @@ export async function content() {
                         })
                         result.sourceText = sourceText
                         const superseded = result.unit ? replacements?.get(result.unit)?.single : undefined
+                        if (superseded ? pageRecords.has(superseded) : errorScope === ERROR_SCOPE.PAGE_TRANSLATE) pageRecords.add(result)
                         let elementResults = translatedElementMap.get(element) ?? []
                         if (superseded) elementResults = elementResults.filter(r => r !== superseded)
                         elementResults.push(result)
@@ -4187,6 +4405,7 @@ export async function content() {
                                 // record findable again on a later scan.
                                 covered: originalTextResult.textNodes,
                             }
+                            if (superseded ? pageRecords.has(superseded) : errorScope === ERROR_SCOPE.PAGE_TRANSLATE) pageRecords.add(record)
                             records.push(record)
 
                             // Bilingual sentence highlighting, gated per unit — a

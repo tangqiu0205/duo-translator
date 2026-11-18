@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] — Fluento
 
 - Start Fluento's independent version numbering. The entries below record inherited Duo Translator releases.
+- Add a redesigned popup for webpage and text translation, and a free automatic service pool that reports which service returned the translation.
+- Show webpage translations progressively. Add whole-page and main-content scopes, with a temporary whole-page action when the main content cannot be identified.
+- Skip very short text blocks and confidently identified excluded languages before sending webpage translation requests.
+- Reuse cached translations across the free pool, while keeping manually selected AI models and endpoints separate.
 
 ## [2.2.6] - 2026-10-02
 

@@ -14,7 +14,7 @@ vi.mock("@/main/storage/translationCache", () => ({
     getMany: vi.fn(async (_s: string, _t: string, texts: string[]) => texts.map(() => null)),
     putMany: vi.fn(async () => { }),
 }));
-vi.mock("@/main/aiService", () => ({ aiPageTranslate: vi.fn() }));
+vi.mock("@/main/aiService", () => ({ aiPageTranslateWithProvider: vi.fn(), resolveAiProviderOrThrow: vi.fn(), providerTaskParams: vi.fn() }));
 // Only the detection is stubbed. The two OpenCC converters stay REAL: the
 // Yandex provider produces the Chinese variant with them, so mocking them out
 // would leave nothing to assert.
@@ -54,13 +54,15 @@ import {
 } from "@/main/translateService";
 import { TRANSLATE_SERVICE, AI_PREFIX, CONFIG_KEY, ACTION } from "@/main/constants";
 import { isTraditionalChinese } from "@/utils/language";
-import { aiPageTranslate } from "@/main/aiService";
+import { aiPageTranslateWithProvider, resolveAiProviderOrThrow } from "@/main/aiService";
 import { handleAsync } from "@/main/messageBridge";
 import * as translationCache from "@/main/storage/translationCache";
 
 const mockFetch = vi.fn();
 const mockIsTraditional = isTraditionalChinese as unknown as Mock;
-const mockAiPageTranslate = aiPageTranslate as unknown as Mock;
+const mockAiPageTranslate = vi.mocked(aiPageTranslateWithProvider);
+const mockResolveAiProvider = vi.mocked(resolveAiProviderOrThrow);
+const aiProvider = { id: "p1", name: "AI", type: "openai" as const, model: "a", url: "https://example.org/v1/chat/completions", apiKey: "secret", getTitle: () => "AI" };
 
 /** Build a fetch Response stub carrying a JSON payload. */
 function reply(body: unknown, status = 200): any {
@@ -98,6 +100,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal("fetch", mockFetch);
     mockIsTraditional.mockReturnValue(false);
+    mockResolveAiProvider.mockReset().mockResolvedValue(aiProvider);
+    mockAiPageTranslate.mockReset();
     mockConfigGet.mockImplementation(async () => undefined);
 });
 
@@ -660,10 +664,10 @@ describe("AiTranslateService.translateText", () => {
     });
 
     it("delegates to aiPageTranslate and wraps the strings", async () => {
-        mockAiPageTranslate.mockResolvedValue(["你好", "世界"]);
+        mockAiPageTranslate.mockResolvedValue([{ text: "你好", cacheable: true }, { text: "世界", cacheable: true }]);
         const out = await new AiTranslateService("p1").translateText(["hello", "world"], "zh-CN");
         expect(out.map((r) => r.translatedMappedHtmlText)).toEqual(["你好", "世界"]);
-        expect(mockAiPageTranslate).toHaveBeenCalledWith("p1", ["hello", "world"], "zh-CN", undefined);
+        expect(mockAiPageTranslate).toHaveBeenCalledWith(aiProvider, ["hello", "world"], "zh-CN", undefined);
     });
 
     // An AI provider's own message ("invalid api key", "insufficient balance")
@@ -760,6 +764,44 @@ describe("translateTextsWithCache", () => {
         const call = fetchCalls(MS_TRANSLATE_HOST)[0];
         expect(new URL(call[0]).searchParams.get("from")).toBe("en");
         expect(result[0].sourceLang).toBe("en");
+    });
+
+    it("isolates AI models and endpoints and reuses the resolved request snapshot", async () => {
+        const read = vi.mocked(translationCache.getMany);
+        const write = vi.mocked(translationCache.putMany);
+        const stored = new Map<string, translationCache.CachedTranslation>();
+        read.mockImplementation(async (namespace, _target, texts) => texts.map(text => stored.get(namespace + text) ?? null));
+        write.mockImplementation(async (namespace, _target, entries) => {
+            for (const { text, value } of entries) stored.set(namespace + text, value);
+        });
+        try {
+            const newer = { ...aiProvider, model: "b" };
+            const otherEndpoint = { ...newer, url: "https://another.example.org/v1/chat/completions" };
+            mockResolveAiProvider.mockResolvedValueOnce(aiProvider).mockResolvedValueOnce(newer)
+                .mockResolvedValueOnce(otherEndpoint).mockResolvedValueOnce(aiProvider);
+            mockAiPageTranslate.mockResolvedValueOnce([{ text: "A", cacheable: true }])
+                .mockResolvedValueOnce([{ text: "B", cacheable: true }])
+                .mockResolvedValueOnce([{ text: "endpoint", cacheable: true }]);
+            for (const translated of ["A", "B", "endpoint", "A"]) {
+                expect((await translateTextsWithCache("ai:p1", ["hello"], "zh-CN"))?.[0].translatedMappedHtmlText).toBe(translated);
+            }
+            expect(mockAiPageTranslate.mock.calls.map(([provider]) => provider)).toEqual([aiProvider, newer, otherEndpoint]);
+            expect(mockResolveAiProvider).toHaveBeenCalledTimes(4);
+            expect(new Set(read.mock.calls.map(([namespace]) => namespace)).size).toBe(3);
+            expect(read.mock.calls.every(([namespace]) => /^ai:v2:[a-f0-9]{64}$/.test(namespace))).toBe(true);
+        } finally {
+            read.mockImplementation(async (_s, _t, texts) => texts.map(() => null));
+            write.mockResolvedValue(undefined);
+        }
+    });
+
+    it("does not cache AI source fallbacks but permits a valid unchanged answer", async () => {
+        mockAiPageTranslate.mockResolvedValue([{ text: "missed", cacheable: false }, { text: "unchanged", cacheable: true }]);
+        await translateTextsWithCache("ai:p1", ["missed", "unchanged"], "zh-CN");
+        expect(translationCache.putMany).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(translationCache.putMany).mock.calls[0][2]).toEqual([
+            { text: "unchanged", value: { t: "unchanged", s: "", c: 1 } },
+        ]);
     });
 
     it("separates Bilibili model caches and resolves each model only once per batch", async () => {
